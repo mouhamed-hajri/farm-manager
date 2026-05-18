@@ -1,0 +1,130 @@
+import 'dart:convert';
+
+class Crop {
+  final String id;
+  final String userId;
+  final String nameFr;
+  final String nameAr;
+  final String iconEmoji;
+  final String kind;
+  final List<int> seasonMonths;
+  final String? fieldId;
+  final String? areaOrCountText;
+  final String? photoLocalPath;
+  final String? photoCloudUrl;
+  final String? notes;
+  final bool isDefault;
+  final String createdAt;
+  final String updatedAt;
+  final String syncStatus;
+
+  const Crop({
+    required this.id,
+    required this.userId,
+    required this.nameFr,
+    required this.nameAr,
+    required this.iconEmoji,
+    required this.kind,
+    required this.seasonMonths,
+    this.fieldId,
+    this.areaOrCountText,
+    this.photoLocalPath,
+    this.photoCloudUrl,
+    this.notes,
+    required this.isDefault,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.syncStatus,
+  });
+
+  bool get isYearRound => seasonMonths.isEmpty || seasonMonths.length == 12;
+
+  Crop copyWith({
+    String? id,
+    String? userId,
+    String? nameFr,
+    String? nameAr,
+    String? iconEmoji,
+    String? kind,
+    List<int>? seasonMonths,
+    String? fieldId,
+    String? areaOrCountText,
+    String? photoLocalPath,
+    String? photoCloudUrl,
+    String? notes,
+    bool? isDefault,
+    String? createdAt,
+    String? updatedAt,
+    String? syncStatus,
+  }) =>
+      Crop(
+        id: id ?? this.id,
+        userId: userId ?? this.userId,
+        nameFr: nameFr ?? this.nameFr,
+        nameAr: nameAr ?? this.nameAr,
+        iconEmoji: iconEmoji ?? this.iconEmoji,
+        kind: kind ?? this.kind,
+        seasonMonths: seasonMonths ?? this.seasonMonths,
+        fieldId: fieldId ?? this.fieldId,
+        areaOrCountText: areaOrCountText ?? this.areaOrCountText,
+        photoLocalPath: photoLocalPath ?? this.photoLocalPath,
+        photoCloudUrl: photoCloudUrl ?? this.photoCloudUrl,
+        notes: notes ?? this.notes,
+        isDefault: isDefault ?? this.isDefault,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        syncStatus: syncStatus ?? this.syncStatus,
+      );
+
+  String seasonMonthsJson() => jsonEncode(seasonMonths);
+
+  Map<String, dynamic> toFirestore() => {
+        'id': id,
+        'userId': userId,
+        'nameFr': nameFr,
+        'nameAr': nameAr,
+        'iconEmoji': iconEmoji,
+        'kind': kind,
+        'seasonMonths': seasonMonths,
+        'fieldId': fieldId,
+        'areaOrCountText': areaOrCountText,
+        'photoCloudUrl': photoCloudUrl,
+        'notes': notes,
+        'isDefault': isDefault,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
+
+  factory Crop.fromFirestore(Map<String, dynamic> m) => Crop(
+        id: m['id'] as String,
+        userId: m['userId'] as String,
+        nameFr: m['nameFr'] as String,
+        nameAr: m['nameAr'] as String,
+        iconEmoji: m['iconEmoji'] as String? ?? '🌱',
+        kind: m['kind'] as String? ?? 'crop',
+        seasonMonths: (m['seasonMonths'] as List?)?.cast<int>() ?? const [],
+        fieldId: m['fieldId'] as String?,
+        areaOrCountText: m['areaOrCountText'] as String?,
+        photoLocalPath: null,
+        photoCloudUrl: m['photoCloudUrl'] as String?,
+        notes: m['notes'] as String?,
+        isDefault: m['isDefault'] as bool? ?? false,
+        createdAt: m['createdAt'] as String,
+        updatedAt: m['updatedAt'] as String,
+        syncStatus: 'synced',
+      );
+
+  static List<int> parseSeasonMonthsJson(String json) {
+    if (json.isEmpty) return const [];
+    final decoded = jsonDecode(json);
+    if (decoded is List) return decoded.cast<int>();
+    return const [];
+  }
+}
+
+abstract class CropKind {
+  static const tree = 'tree';
+  static const crop = 'crop';
+  static const vegetable = 'vegetable';
+  static const other = 'other';
+}
