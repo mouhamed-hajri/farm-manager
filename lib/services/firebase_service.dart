@@ -191,4 +191,21 @@ class FirebaseService {
         .get();
     return doc.data()?['lastBackupDate'] as String?;
   }
+
+  // Fast probe: does this user have ANY data in cloud? Used for auto-restore on
+  // first login per device — checks each collection with limit 1 to avoid
+  // pulling the whole dataset just to detect non-emptiness.
+  Future<bool> hasAnyCloudData(String userId) async {
+    for (final name in const [
+      'animals',
+      'fields',
+      'crops',
+      'expenses',
+      'sales',
+    ]) {
+      final snap = await _coll(userId, name).limit(1).get();
+      if (snap.docs.isNotEmpty) return true;
+    }
+    return false;
+  }
 }

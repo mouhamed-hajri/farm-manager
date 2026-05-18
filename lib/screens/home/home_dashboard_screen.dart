@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/history_entry.dart';
 import '../../providers/animal_provider.dart';
+import '../../providers/core_providers.dart';
 import '../../providers/expense_provider.dart';
 import '../../providers/field_provider.dart';
 import '../../providers/history_provider.dart';
@@ -12,13 +14,88 @@ import '../../providers/sync_provider.dart' show syncStateProvider, SyncStatus;
 import '../../theme/app_theme.dart';
 import '../../widgets/stat_card.dart';
 
-class HomeDashboardScreen extends ConsumerWidget {
+class HomeDashboardScreen extends ConsumerStatefulWidget {
   const HomeDashboardScreen({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeDashboardScreen> createState() =>
+      _HomeDashboardScreenState();
+}
+
+class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
+  bool _restoring = false;
+  String _restoreMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoRestore());
+  }
+
+  // First-time-per-device restore: if this (device, uid) pair has never run a
+  // restore AND the cloud has data, pull it down before the user starts
+  // creating local records that would otherwise conflict with the cloud copy.
+  Future<void> _maybeAutoRestore() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'restored_user_${user.uid}';
+    if (prefs.getBool(key) == true) return;
+
+    // Mark immediately so a fast tab-switch can't re-enter this method.
+    await prefs.setBool(key, true);
+
+    if (!mounted) return;
+    setState(() {
+      _restoring = true;
+      _restoreMessage = 'Vérification des sauvegardes…';
+    });
+
+    try {
+      final hasCloud = await ref
+          .read(firebaseServiceProvider)
+          .hasAnyCloudData(user.uid);
+      if (!hasCloud) {
+        // Nothing in cloud — likely a brand-new account, no restore needed.
+        return;
+      }
+      if (mounted) {
+        setState(() => _restoreMessage = 'Restauration de vos données…');
+      }
+      final result =
+          await ref.read(syncStateProvider.notifier).restore();
+      if (!mounted) return;
+      if (result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: AppColors.green,
+          content: Text(
+              'Données restaurées : ${result.restoredAnimals} animaux, ${result.restoredExpenses} dépenses.'),
+        ));
+      } else {
+        // Restore failed — unset the flag so the next launch retries.
+        await prefs.remove(key);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: AppColors.red,
+          content: Text('Échec restauration : ${result.error ?? "inconnu"}'),
+        ));
+      }
+    } catch (e) {
+      await prefs.remove(key);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: AppColors.red,
+          content: Text('Erreur restauration : $e'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _restoring = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Trigger seed of defaults once after auth.
     ref.watch(speciesSeederProvider);
 
@@ -26,11 +103,41 @@ class HomeDashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('مزرعتي · Ma Ferme'),
       ),
-      body: navigationShell,
+      body: Stack(
+        children: [
+          widget.navigationShell,
+          if (_restoring)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.6),
+                child: Center(
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(
+                            _restoreMessage,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        currentIndex: navigationShell.currentIndex,
-        onTap: (i) => navigationShell.goBranch(i),
+        currentIndex: widget.navigationShell.currentIndex,
+        onTap: (i) => widget.navigationShell.goBranch(i),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Accueil'),
           BottomNavigationBarItem(icon: Icon(Icons.pets), label: 'Animaux'),
