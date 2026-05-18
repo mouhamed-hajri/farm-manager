@@ -69,7 +69,7 @@ class _FieldsTab extends ConsumerWidget {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/cultures/field/new'),
+        onPressed: () => context.push('/cultures/field/new'),
         icon: const Icon(Icons.add),
         label: const Text('Champ'),
         backgroundColor: AppColors.green,
@@ -165,7 +165,7 @@ class _FieldCard extends StatelessWidget {
             ),
           ],
         ),
-        onTap: () => context.go('/cultures/field/${field.id}'),
+        onTap: () => context.push('/cultures/field/${field.id}'),
       ),
     );
   }
@@ -201,7 +201,7 @@ class _CropsTab extends ConsumerWidget {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/cultures/crop/new'),
+        onPressed: () => context.push('/cultures/crop/new'),
         icon: const Icon(Icons.add),
         label: const Text('Culture'),
         backgroundColor: AppColors.green,
@@ -224,7 +224,7 @@ class _CropCard extends StatelessWidget {
         subtitle: Text(crop.isYearRound
             ? 'Toute l\'année · ${crop.nameAr}'
             : 'Saison: ${_seasonRange(crop.seasonMonths)} · ${crop.nameAr}'),
-        onTap: () => context.go('/cultures/crop/${crop.id}'),
+        onTap: () => context.push('/cultures/crop/${crop.id}'),
       ),
     );
   }

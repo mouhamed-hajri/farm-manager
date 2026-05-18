@@ -11,7 +11,18 @@ import '../../theme/app_theme.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditSaleScreen extends ConsumerStatefulWidget {
-  const AddEditSaleScreen({super.key});
+  const AddEditSaleScreen({
+    super.key,
+    this.preselectedScope,
+    this.preselectedAnimalId,
+    this.preselectedSpeciesId,
+    this.preselectedCropId,
+  });
+
+  final String? preselectedScope;
+  final String? preselectedAnimalId;
+  final String? preselectedSpeciesId;
+  final String? preselectedCropId;
 
   @override
   ConsumerState<AddEditSaleScreen> createState() => _AddEditSaleScreenState();
@@ -21,28 +32,107 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _qtyController = TextEditingController(text: '1');
   final _unitPriceController = TextEditingController();
+  final _totalPriceController = TextEditingController();
   final _productController = TextEditingController();
   final _buyerNameController = TextEditingController();
   final _buyerPhoneController = TextEditingController();
   final _notesController = TextEditingController();
-  String _scope = SaleScope.crop;
-  String _unit = SaleUnit.grandeCaisse;
+  late String _scope;
+  late String _unit;
   DateTime _date = DateTime.now();
   String? _photoLocalPath;
   String? _linkedSpeciesId;
   String? _linkedAnimalId;
   String? _linkedCropId;
   bool _loading = false;
+  // Tracks which price field the user last typed in so we know what to recompute
+  // when the quantity changes. 'total' means total is the source of truth (the
+  // common case — "I sold 3 caisses for 90 TND"); 'unit' means unit price is.
+  String _priceSource = 'total';
+  bool _syncingPrice = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scope = widget.preselectedScope ?? SaleScope.crop;
+    _unit = _scope == SaleScope.animal ? SaleUnit.piece : SaleUnit.grandeCaisse;
+    _linkedAnimalId = widget.preselectedAnimalId;
+    _linkedSpeciesId = widget.preselectedSpeciesId;
+    _linkedCropId = widget.preselectedCropId;
+  }
 
   @override
   void dispose() {
     _qtyController.dispose();
     _unitPriceController.dispose();
+    _totalPriceController.dispose();
     _productController.dispose();
     _buyerNameController.dispose();
     _buyerPhoneController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  String _fmt(double v) {
+    // Show as integer if whole, else 2 decimals — keeps the UI clean
+    if (v == v.roundToDouble()) return v.toStringAsFixed(0);
+    return v.toStringAsFixed(2);
+  }
+
+  void _onQtyChanged() {
+    final qty = double.tryParse(_qtyController.text) ?? 0;
+    if (qty <= 0) {
+      setState(() {});
+      return;
+    }
+    _syncingPrice = true;
+    if (_priceSource == 'total') {
+      final total = double.tryParse(_totalPriceController.text) ?? 0;
+      if (total > 0) {
+        _unitPriceController.text = _fmt(total / qty);
+      }
+    } else {
+      final unit = double.tryParse(_unitPriceController.text) ?? 0;
+      if (unit > 0) {
+        _totalPriceController.text = _fmt(unit * qty);
+      }
+    }
+    _syncingPrice = false;
+    setState(() {});
+  }
+
+  void _onTotalChanged() {
+    if (_syncingPrice) return;
+    _priceSource = 'total';
+    final qty = double.tryParse(_qtyController.text) ?? 0;
+    final total = double.tryParse(_totalPriceController.text) ?? 0;
+    if (qty > 0 && total > 0) {
+      _syncingPrice = true;
+      _unitPriceController.text = _fmt(total / qty);
+      _syncingPrice = false;
+    } else if (total == 0) {
+      _syncingPrice = true;
+      _unitPriceController.clear();
+      _syncingPrice = false;
+    }
+    setState(() {});
+  }
+
+  void _onUnitChanged() {
+    if (_syncingPrice) return;
+    _priceSource = 'unit';
+    final qty = double.tryParse(_qtyController.text) ?? 0;
+    final unit = double.tryParse(_unitPriceController.text) ?? 0;
+    if (qty > 0 && unit > 0) {
+      _syncingPrice = true;
+      _totalPriceController.text = _fmt(unit * qty);
+      _syncingPrice = false;
+    } else if (unit == 0) {
+      _syncingPrice = true;
+      _totalPriceController.clear();
+      _syncingPrice = false;
+    }
+    setState(() {});
   }
 
   void _onScopeChanged(String s) {
@@ -53,6 +143,9 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
       _linkedCropId = null;
       _productController.clear();
       _qtyController.text = '1';
+      _unitPriceController.clear();
+      _totalPriceController.clear();
+      _priceSource = 'total';
       switch (s) {
         case SaleScope.animal:
           _unit = SaleUnit.piece;
@@ -77,6 +170,9 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
   }
 
   double get _total {
+    // Single source of truth: whatever the user last edited or what got computed
+    final t = double.tryParse(_totalPriceController.text) ?? 0;
+    if (t > 0) return t;
     final q = double.tryParse(_qtyController.text) ?? 0;
     final p = double.tryParse(_unitPriceController.text) ?? 0;
     return q * p;
@@ -110,7 +206,11 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
             );
       } else {
         final qty = double.parse(_qtyController.text);
-        final price = double.parse(_unitPriceController.text);
+        final total = double.tryParse(_totalPriceController.text) ?? 0;
+        final unitFromField = double.tryParse(_unitPriceController.text) ?? 0;
+        // Total is canonical when present; unit price is derived (qty > 0 guaranteed by validator)
+        final unit = total > 0 ? total / qty : unitFromField;
+        final finalTotal = total > 0 ? total : unit * qty;
         await ref.read(saleRepositoryProvider).addSale(Sale(
               id: '',
               userId: user.uid,
@@ -121,8 +221,8 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
                   : null,
               quantity: qty,
               unit: _unit,
-              unitPrice: price,
-              totalPrice: qty * price,
+              unitPrice: unit,
+              totalPrice: finalTotal,
               buyerName: _buyerNameController.text.trim().isEmpty
                   ? null
                   : _buyerNameController.text.trim(),
@@ -202,7 +302,7 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) => _onQtyChanged(),
                     validator: (v) {
                       final n = double.tryParse(v ?? '');
                       if (n == null || n <= 0) return 'Quantité invalide';
@@ -236,31 +336,65 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
                 ),
               ]),
               const SizedBox(height: 12),
-            ],
-            TextFormField(
-              controller: _unitPriceController,
-              decoration: InputDecoration(
-                labelText: _scope == SaleScope.animal
-                    ? 'Prix de vente (TND) *'
-                    : 'Prix unitaire (TND) *',
-                border: const OutlineInputBorder(),
+              // Primary field: total price. Big and prominent — what dad will type.
+              TextFormField(
+                controller: _totalPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'Prix total (TND) *',
+                  helperText: 'Le prix unitaire est calculé automatiquement',
+                  prefixIcon: Icon(Icons.attach_money, color: AppColors.green),
+                  border: OutlineInputBorder(),
+                ),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => _onTotalChanged(),
+                validator: (v) {
+                  // Either total OR unit must be filled
+                  final t = double.tryParse(v ?? '');
+                  final u = double.tryParse(_unitPriceController.text);
+                  if ((t == null || t <= 0) && (u == null || u <= 0)) {
+                    return 'Prix requis';
+                  }
+                  if (t != null && t < 0) return 'Prix invalide';
+                  return null;
+                },
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (_) => setState(() {}),
-              validator: (v) {
-                final n = double.tryParse(v ?? '');
-                if (n == null || n < 0) return 'Prix invalide';
-                return null;
-              },
-            ),
-            if (_scope != SaleScope.animal && _total > 0) ...[
-              const SizedBox(height: 8),
-              Text('Total : ${_total.toStringAsFixed(2)} TND',
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.green)),
+              const SizedBox(height: 10),
+              // Secondary field: unit price. Auto-computed; editable for users
+              // who prefer to enter it directly (then total recomputes).
+              TextFormField(
+                controller: _unitPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'Prix unitaire (TND)',
+                  helperText: 'Ou tapez le prix unitaire — le total se met à jour',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                style: const TextStyle(fontSize: 14, color: Colors.black54),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => _onUnitChanged(),
+              ),
             ],
+            if (_scope == SaleScope.animal)
+              TextFormField(
+                controller: _unitPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'Prix de vente (TND) *',
+                  prefixIcon: Icon(Icons.attach_money, color: AppColors.green),
+                  border: OutlineInputBorder(),
+                ),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+                validator: (v) {
+                  final n = double.tryParse(v ?? '');
+                  if (n == null || n < 0) return 'Prix invalide';
+                  return null;
+                },
+              ),
             const SizedBox(height: 12),
             ListTile(
               contentPadding: EdgeInsets.zero,

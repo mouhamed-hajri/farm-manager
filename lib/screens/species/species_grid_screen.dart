@@ -44,7 +44,7 @@ class SpeciesGridScreen extends ConsumerWidget {
               if (i == species.length) {
                 return InkWell(
                   borderRadius: BorderRadius.circular(16),
-                  onTap: () => context.go('/animals/species/new'),
+                  onTap: () => context.push('/animals/species/new'),
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
@@ -72,7 +72,7 @@ class SpeciesGridScreen extends ConsumerWidget {
               final count = activeCounts[s.id] ?? 0;
               return InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: () => context.go('/animals/species/${s.id}'),
+                onTap: () => context.push('/animals/species/${s.id}'),
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.green.withValues(alpha: 0.1),

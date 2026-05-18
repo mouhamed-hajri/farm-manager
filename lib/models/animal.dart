@@ -61,6 +61,36 @@ class Animal {
 
   String get displayName => nickname?.isNotEmpty == true ? nickname! : farmId;
 
+  // Human-readable age from birthDate (ISO yyyy-MM-dd). Null if no birthDate.
+  // Returns short form: "3j" / "2 mois" / "1 an" / "2 ans 4 mois"
+  String? get ageLabel {
+    if (birthDate == null) return null;
+    final birth = DateTime.tryParse(birthDate!);
+    if (birth == null) return null;
+    final now = DateTime.now();
+    if (birth.isAfter(now)) return null;
+    var years = now.year - birth.year;
+    var months = now.month - birth.month;
+    var days = now.day - birth.day;
+    if (days < 0) {
+      months -= 1;
+      days += DateTime(now.year, now.month, 0).day;
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+    if (years <= 0 && months <= 0) {
+      return '${days}j';
+    }
+    if (years <= 0) {
+      return '$months mois';
+    }
+    final yLabel = years == 1 ? '1 an' : '$years ans';
+    if (months == 0) return yLabel;
+    return '$yLabel $months mois';
+  }
+
   Animal copyWith({
     String? id,
     String? userId,

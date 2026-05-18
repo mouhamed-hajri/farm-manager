@@ -39,7 +39,7 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.cloud_sync),
             title: const Text('Sauvegarde & restauration'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.go('/settings/backup'),
+            onTap: () => context.push('/settings/backup'),
           ),
           _section('Préférences'),
           ListTile(

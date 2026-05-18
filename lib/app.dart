@@ -11,6 +11,7 @@ import 'screens/backup/backup_restore_screen.dart';
 import 'screens/cultures/add_edit_crop_screen.dart';
 import 'screens/cultures/add_edit_field_screen.dart';
 import 'screens/cultures/cultures_screen.dart';
+import 'screens/cultures/field_dashboard_screen.dart';
 import 'screens/finances/add_edit_expense_screen.dart';
 import 'screens/finances/add_edit_sale_screen.dart';
 import 'screens/finances/finances_screen.dart';
@@ -53,8 +54,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/animals/species/:speciesId/new',
-        builder: (_, state) => AddEditAnimalScreen(
-            speciesId: state.pathParameters['speciesId']!),
+        builder: (_, state) {
+          final extra = state.extra as Map<String, String?>?;
+          return AddEditAnimalScreen(
+            speciesId: state.pathParameters['speciesId']!,
+            motherId: extra?['motherId'],
+            fatherId: extra?['fatherId'],
+          );
+        },
       ),
       GoRoute(
         path: '/animals/species/:speciesId/:animalId',
@@ -73,9 +80,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const AddEditFieldScreen(),
       ),
       GoRoute(
-        path: '/cultures/field/:id',
+        path: '/cultures/field/:id/edit',
         builder: (_, state) =>
             AddEditFieldScreen(fieldId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/cultures/field/:id',
+        builder: (_, state) =>
+            FieldDashboardScreen(fieldId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/cultures/crop/new',
@@ -88,11 +100,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/finances/expense/new',
-        builder: (_, __) => const AddEditExpenseScreen(),
+        builder: (_, state) {
+          final extra = state.extra as Map<String, String?>?;
+          return AddEditExpenseScreen(
+            preselectedScope: extra?['scope'],
+            preselectedAnimalId: extra?['animalId'],
+            preselectedSpeciesId: extra?['speciesId'],
+            preselectedCropId: extra?['cropId'],
+            preselectedFieldId: extra?['fieldId'],
+          );
+        },
       ),
       GoRoute(
         path: '/finances/sale/new',
-        builder: (_, __) => const AddEditSaleScreen(),
+        builder: (_, state) {
+          final extra = state.extra as Map<String, String?>?;
+          return AddEditSaleScreen(
+            preselectedScope: extra?['scope'],
+            preselectedAnimalId: extra?['animalId'],
+            preselectedSpeciesId: extra?['speciesId'],
+            preselectedCropId: extra?['cropId'],
+          );
+        },
       ),
       GoRoute(
         path: '/settings/backup',

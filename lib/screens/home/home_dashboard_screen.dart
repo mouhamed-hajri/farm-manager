@@ -51,6 +51,7 @@ class HomeTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final animalStats = ref.watch(allAnimalsStatsProvider);
     final expenseStats = ref.watch(expenseStatsProvider);
+    final expensesAsync = ref.watch(expenseListProvider);
     final fieldsAsync = ref.watch(fieldsListProvider);
     final salesAsync = ref.watch(salesListProvider);
     final syncState = ref.watch(syncStateProvider);
@@ -59,12 +60,32 @@ class HomeTab extends ConsumerWidget {
     final now = DateTime.now();
     final monthPrefix =
         '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final lastMonth = DateTime(now.year, now.month - 1, 1);
+    final lastMonthPrefix =
+        '${lastMonth.year}-${lastMonth.month.toString().padLeft(2, '0')}';
 
-    final incomeThisMonth = salesAsync.asData?.value
-            .where((s) => s.saleDate.startsWith(monthPrefix))
-            .fold<double>(0.0, (sum, s) => sum + s.totalPrice) ??
-        0.0;
+    final salesList = salesAsync.asData?.value ?? const [];
+    final expensesList = expensesAsync.asData?.value ?? const [];
+
+    final incomeThisMonth = salesList
+        .where((s) => s.saleDate.startsWith(monthPrefix))
+        .fold<double>(0.0, (sum, s) => sum + s.totalPrice);
+    final incomeLastMonth = salesList
+        .where((s) => s.saleDate.startsWith(lastMonthPrefix))
+        .fold<double>(0.0, (sum, s) => sum + s.totalPrice);
+    final expenseLastMonth = expensesList
+        .where((e) => e.date.startsWith(lastMonthPrefix))
+        .fold<double>(0.0, (sum, e) => sum + e.amount);
+
     final profitThisMonth = incomeThisMonth - expenseStats.totalThisMonth;
+    final profitLastMonth = incomeLastMonth - expenseLastMonth;
+    final profitDelta = profitThisMonth - profitLastMonth;
+    final incomeDelta = incomeThisMonth - incomeLastMonth;
+
+    String fmtDelta(double v) {
+      final sign = v >= 0 ? '+' : '−';
+      return '$sign${v.abs().toStringAsFixed(0)} TND vs mois dernier';
+    }
 
     final fieldCount = fieldsAsync.asData?.value.length ?? 0;
     final rentedCount = fieldsAsync.asData?.value
@@ -84,7 +105,7 @@ class HomeTab extends ConsumerWidget {
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.35,
             children: [
               StatCard(
                 label: 'Animaux actifs',
@@ -110,6 +131,8 @@ class HomeTab extends ConsumerWidget {
                 value: '${incomeThisMonth.toStringAsFixed(0)} TND',
                 icon: Icons.attach_money,
                 color: AppColors.green,
+                delta: incomeLastMonth > 0 ? fmtDelta(incomeDelta) : null,
+                deltaPositive: incomeDelta >= 0,
               ),
               StatCard(
                 label: 'Bénéfice (mois)',
@@ -118,6 +141,10 @@ class HomeTab extends ConsumerWidget {
                 color: profitThisMonth >= 0
                     ? AppColors.green
                     : AppColors.red,
+                delta: (incomeLastMonth > 0 || expenseLastMonth > 0)
+                    ? fmtDelta(profitDelta)
+                    : null,
+                deltaPositive: profitDelta >= 0,
               ),
               StatCard(
                 label: 'Champs',
@@ -142,13 +169,13 @@ class HomeTab extends ConsumerWidget {
                 icon: Icons.money_off,
                 label: 'Dépense',
                 color: AppColors.red,
-                onTap: () => context.go('/finances/expense/new'),
+                onTap: () => context.push('/finances/expense/new'),
               ),
               _QuickActionButton(
                 icon: Icons.attach_money,
                 label: 'Vente',
                 color: AppColors.blue,
-                onTap: () => context.go('/finances/sale/new'),
+                onTap: () => context.push('/finances/sale/new'),
               ),
               _QuickActionButton(
                 icon: Icons.cloud_upload,

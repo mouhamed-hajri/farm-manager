@@ -17,6 +17,7 @@ import '../repositories/species_repository.dart';
 import '../services/farm_id_service.dart';
 import '../services/firebase_service.dart';
 import '../services/photo_service.dart';
+import '../services/reminder_service.dart';
 import '../services/storage_service.dart';
 
 const _cloudinaryConfig = CloudinaryConfig(
@@ -111,6 +112,10 @@ final healthEventRepositoryProvider = Provider<HealthEventRepository>((ref) {
 
 final reminderRepositoryProvider = Provider<ReminderRepository>((ref) {
   return ReminderRepository(ref.watch(appDatabaseProvider));
+});
+
+final reminderServiceProvider = Provider<ReminderService>((ref) {
+  return ReminderService(ref.watch(reminderRepositoryProvider));
 });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {

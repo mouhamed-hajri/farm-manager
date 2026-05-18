@@ -122,11 +122,11 @@ class _AddEditFieldScreenState extends ConsumerState<AddEditFieldScreen> {
 
     try {
       final repo = ref.read(fieldRepositoryProvider);
-      if (_existing == null) {
-        await repo.addField(base);
-      } else {
-        await repo.updateField(base);
-      }
+      final saved = _existing == null
+          ? await repo.addField(base)
+          : await repo.updateField(base);
+      // Schedule rent reminders (cancels existing first).
+      await ref.read(reminderServiceProvider).scheduleRentReminders(saved);
       if (!mounted) return;
       context.pop();
     } catch (e) {

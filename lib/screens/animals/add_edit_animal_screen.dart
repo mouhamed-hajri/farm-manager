@@ -8,10 +8,18 @@ import '../../theme/app_theme.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditAnimalScreen extends ConsumerStatefulWidget {
-  const AddEditAnimalScreen({super.key, required this.speciesId, this.animalId});
+  const AddEditAnimalScreen({
+    super.key,
+    required this.speciesId,
+    this.animalId,
+    this.motherId,
+    this.fatherId,
+  });
 
   final String speciesId;
   final String? animalId;
+  final String? motherId;
+  final String? fatherId;
 
   @override
   ConsumerState<AddEditAnimalScreen> createState() =>
@@ -157,6 +165,8 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                     : _purchaseLocationController.text.trim(),
                 photoLocalPath: _photoLocalPath,
                 photoCloudUrl: _photoCloudUrl,
+                motherId: widget.motherId,
+                fatherId: widget.fatherId,
                 notes: _notesController.text.trim().isEmpty
                     ? null
                     : _notesController.text.trim(),

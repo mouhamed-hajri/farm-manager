@@ -35,6 +35,10 @@ dependencies:
   # Background sync
   workmanager: ^0.9.0
 
+  # Local notifications (reminders)
+  flutter_local_notifications: ^17.2.4
+  timezone: ^0.9.4
+
   # Photo
   flutter_image_compress: ^2.3.0
   image_picker: ^1.1.2

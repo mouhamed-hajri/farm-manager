@@ -12,7 +12,20 @@ import '../../theme/app_theme.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditExpenseScreen extends ConsumerStatefulWidget {
-  const AddEditExpenseScreen({super.key});
+  const AddEditExpenseScreen({
+    super.key,
+    this.preselectedScope,
+    this.preselectedAnimalId,
+    this.preselectedSpeciesId,
+    this.preselectedCropId,
+    this.preselectedFieldId,
+  });
+
+  final String? preselectedScope;
+  final String? preselectedAnimalId;
+  final String? preselectedSpeciesId;
+  final String? preselectedCropId;
+  final String? preselectedFieldId;
 
   @override
   ConsumerState<AddEditExpenseScreen> createState() =>
@@ -23,8 +36,8 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _descController = TextEditingController();
-  String _scope = ExpenseScope.general;
-  String _category = GeneralExpenseCategory.fuel;
+  late String _scope;
+  late String _category;
   DateTime _date = DateTime.now();
   String? _photoLocalPath;
   String? _linkedSpeciesId;
@@ -32,6 +45,17 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
   String? _linkedCropId;
   String? _linkedFieldId;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scope = widget.preselectedScope ?? ExpenseScope.general;
+    _category = categoriesForScope(_scope).first;
+    _linkedAnimalId = widget.preselectedAnimalId;
+    _linkedSpeciesId = widget.preselectedSpeciesId;
+    _linkedCropId = widget.preselectedCropId;
+    _linkedFieldId = widget.preselectedFieldId;
+  }
 
   @override
   void dispose() {

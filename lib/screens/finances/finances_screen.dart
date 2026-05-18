@@ -73,7 +73,7 @@ class _ExpensesTab extends ConsumerWidget {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/finances/expense/new'),
+        onPressed: () => context.push('/finances/expense/new'),
         icon: const Icon(Icons.add),
         label: const Text('Dépense'),
         backgroundColor: AppColors.red,
@@ -135,7 +135,7 @@ class _SalesTab extends ConsumerWidget {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/finances/sale/new'),
+        onPressed: () => context.push('/finances/sale/new'),
         icon: const Icon(Icons.add),
         label: const Text('Vente'),
         backgroundColor: AppColors.green,
