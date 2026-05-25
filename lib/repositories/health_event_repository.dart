@@ -35,6 +35,16 @@ class HealthEventRepository {
 
   Future<void> markSynced(String id) => _db.markHealthEventSynced(id);
 
+  Future<List<HealthEvent>> getForAnimal(String userId, String animalId) async {
+    final rows = await _db.getHealthEventsForAnimal(userId, animalId);
+    return rows.map((r) => r.toModel()).toList();
+  }
+
+  Future<List<HealthEvent>> getAllForUser(String userId) async {
+    final rows = await _db.getAllHealthEventsForUser(userId);
+    return rows.map((r) => r.toModel()).toList();
+  }
+
   HealthEventsTableCompanion _toCompanion(HealthEvent h) =>
       HealthEventsTableCompanion(
         id: Value(h.id),

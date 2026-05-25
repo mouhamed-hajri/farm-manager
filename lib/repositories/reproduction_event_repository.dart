@@ -35,6 +35,53 @@ class ReproductionEventRepository {
 
   Future<void> markSynced(String id) => _db.markReproductionEventSynced(id);
 
+  Future<List<ReproductionEvent>> getForAnimal(String userId, String animalId) async {
+    final rows = await _db.getAllReproductionForAnimal(userId, animalId);
+    return rows.map((r) => r.toModel()).toList();
+  }
+
+  Future<List<ReproductionEvent>> getAllForUser(String userId) async {
+    final rows = await _db.getAllReproductionEventsForUser(userId);
+    return rows.map((r) => r.toModel()).toList();
+  }
+
+  /// Closes all open reproduction cycles for a female (on death or sale).
+  Future<void> cancelOpenCycles(String userId, String animalId, String reason) async {
+    final all = await _db.getAllReproductionForAnimal(userId, animalId);
+    final events = all.map((r) => r.toModel()).toList();
+
+    final groups = <String, List<ReproductionEvent>>{};
+    for (final e in events) {
+      final gid = e.pregnancyGroupId ?? e.id;
+      groups.putIfAbsent(gid, () => []).add(e);
+    }
+
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final closingTypes = {
+      ReproductionEventType.birth,
+      ReproductionEventType.pregnancyLoss,
+      ReproductionEventType.cycleCanceled,
+    };
+
+    for (final entry in groups.entries) {
+      final types = entry.value.map((e) => e.eventType).toSet();
+      if (types.intersection(closingTypes).isEmpty) {
+        await add(ReproductionEvent(
+          id: '',
+          userId: userId,
+          animalId: animalId,
+          eventType: ReproductionEventType.cycleCanceled,
+          eventDate: today,
+          pregnancyGroupId: entry.key,
+          notes: reason,
+          createdAt: '',
+          updatedAt: '',
+          syncStatus: 'pending',
+        ));
+      }
+    }
+  }
+
   ReproductionEventsTableCompanion _toCompanion(ReproductionEvent e) =>
       ReproductionEventsTableCompanion(
         id: Value(e.id),
