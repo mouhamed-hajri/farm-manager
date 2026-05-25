@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import '../models/animal.dart';
+import '../models/breed.dart';
 import '../models/expense.dart';
 import '../models/history_entry.dart';
 import '../models/species.dart';
@@ -11,7 +12,9 @@ import '../models/reproduction_event.dart';
 import '../models/health_event.dart';
 import '../models/reminder.dart';
 import '../models/user_settings.dart';
+import '../models/weight_measurement.dart';
 import 'tables/animals_table.dart';
+import 'tables/breeds_table.dart';
 import 'tables/expenses_table.dart';
 import 'tables/history_table.dart';
 import 'tables/species_table.dart';
@@ -23,11 +26,13 @@ import 'tables/reproduction_events_table.dart';
 import 'tables/health_events_table.dart';
 import 'tables/reminders_table.dart';
 import 'tables/settings_table.dart';
+import 'tables/weight_measurements_table.dart';
 
 part 'app_database.g.dart';
 
 @DriftDatabase(tables: [
   AnimalsTable,
+  BreedsTable,
   ExpensesTable,
   HistoryTable,
   SpeciesTable,
@@ -39,22 +44,49 @@ part 'app_database.g.dart';
   HealthEventsTable,
   RemindersTable,
   SettingsTable,
+  WeightMeasurementsTable,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
-          // Pre-launch: drop everything and recreate. No user data to preserve.
-          for (final table in allTables) {
-            await m.deleteTable(table.actualTableName);
+          if (from < 2) {
+            for (final table in allTables) {
+              await m.deleteTable(table.actualTableName);
+            }
+            await m.createAll();
+            return;
           }
-          await m.createAll();
+          if (from < 3) {
+            await m.addColumn(animalsTable, animalsTable.financeOwnerId);
+            await m.addColumn(animalsTable, animalsTable.financeMode);
+            await m.addColumn(animalsTable, animalsTable.birthEventId);
+            await customStatement('''
+              UPDATE animals SET
+                finance_owner_id = CASE
+                  WHEN gender = 'male' AND mother_id IS NOT NULL THEN mother_id
+                  ELSE id
+                END,
+                finance_mode = CASE
+                  WHEN gender = 'male' AND mother_id IS NOT NULL THEN 'counted_under_mother'
+                  WHEN gender = 'female' AND mother_id IS NOT NULL THEN 'independent_female_center'
+                  ELSE 'self'
+                END
+              WHERE finance_owner_id IS NULL
+            ''');
+          }
+          if (from < 4) {
+            await m.createTable(breedsTable);
+          }
+          if (from < 5) {
+            await m.createTable(weightMeasurementsTable);
+          }
         },
       );
 
@@ -94,6 +126,80 @@ class AppDatabase extends _$AppDatabase {
   Future<void> markSpeciesSynced(String id) async {
     await (update(speciesTable)..where((t) => t.id.equals(id))).write(
       const SpeciesTableCompanion(syncStatus: Value('synced')),
+    );
+  }
+
+  // ─── Breeds ────────────────────────────────────────────────────────────────
+
+  Stream<List<BreedsTableData>> watchBreeds(String userId, String speciesId) =>
+      (select(breedsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.speciesId.equals(speciesId))
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .watch();
+
+  Future<List<BreedsTableData>> getBreeds(String userId, String speciesId) =>
+      (select(breedsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.speciesId.equals(speciesId))
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .get();
+
+  Future<int> insertBreed(BreedsTableCompanion entry) =>
+      into(breedsTable).insert(entry);
+
+  Future<int> deleteBreed(String id) =>
+      (delete(breedsTable)..where((t) => t.id.equals(id))).go();
+
+  Future<List<BreedsTableData>> getPendingBreeds(String userId) =>
+      (select(breedsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.syncStatus.equals('pending')))
+          .get();
+
+  Future<void> markBreedSynced(String id) async {
+    await (update(breedsTable)..where((t) => t.id.equals(id))).write(
+      const BreedsTableCompanion(syncStatus: Value('synced')),
+    );
+  }
+
+  Future<List<BreedsTableData>> getAllBreeds(String userId) =>
+      (select(breedsTable)..where((t) => t.userId.equals(userId))).get();
+
+  // ─── Weight Measurements ──────────────────────────────────────────────────
+
+  Stream<List<WeightMeasurementsTableData>> watchWeightMeasurementsForAnimal(
+          String userId, String animalId) =>
+      (select(weightMeasurementsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.animalId.equals(animalId))
+            ..orderBy([(t) => OrderingTerm.asc(t.measurementDate)]))
+          .watch();
+
+  Future<List<WeightMeasurementsTableData>> getAllWeightMeasurements(
+          String userId) =>
+      (select(weightMeasurementsTable)
+            ..where((t) => t.userId.equals(userId)))
+          .get();
+
+  Future<int> insertWeightMeasurement(
+          WeightMeasurementsTableCompanion entry) =>
+      into(weightMeasurementsTable).insertOnConflictUpdate(entry);
+
+  Future<int> deleteWeightMeasurement(String id) =>
+      (delete(weightMeasurementsTable)..where((t) => t.id.equals(id))).go();
+
+  Future<List<WeightMeasurementsTableData>> getPendingWeightMeasurements(
+          String userId) =>
+      (select(weightMeasurementsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.syncStatus.equals('pending')))
+          .get();
+
+  Future<void> markWeightMeasurementSynced(String id) async {
+    await (update(weightMeasurementsTable)..where((t) => t.id.equals(id)))
+        .write(
+      const WeightMeasurementsTableCompanion(syncStatus: Value('synced')),
     );
   }
 
@@ -149,6 +255,50 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> deleteAnimal(String id) =>
       (delete(animalsTable)..where((t) => t.id.equals(id))).go();
+
+  /// Re-points every animal of [fromSpeciesId] to [toSpeciesId]. Used when
+  /// merging duplicate species so no animal is left orphaned.
+  Future<void> reassignAnimalsSpecies(
+      String userId, String fromSpeciesId, String toSpeciesId) async {
+    await (update(animalsTable)
+          ..where((t) =>
+              t.userId.equals(userId) & t.speciesId.equals(fromSpeciesId)))
+        .write(AnimalsTableCompanion(
+      speciesId: Value(toSpeciesId),
+      syncStatus: const Value('pending'),
+    ));
+  }
+
+  Future<List<AnimalsTableData>> getAnimalsByFinanceOwner(
+          String userId, String ownerId) =>
+      (select(animalsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.financeOwnerId.equals(ownerId)))
+          .get();
+
+  Future<List<AnimalsTableData>> getAnimalsByMotherId(
+          String userId, String motherId) =>
+      (select(animalsTable)
+            ..where(
+                (t) => t.userId.equals(userId) & t.motherId.equals(motherId)))
+          .get();
+
+  Future<List<AnimalsTableData>> getAnimalsByBirthEventId(
+          String userId, String birthEventId) =>
+      (select(animalsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.birthEventId.equals(birthEventId)))
+          .get();
+
+  Future<List<AnimalsTableData>> getMalesForSpecies(
+          String userId, String speciesId) =>
+      (select(animalsTable)
+            ..where((t) =>
+                t.userId.equals(userId) &
+                t.speciesId.equals(speciesId) &
+                t.gender.equals('male'))
+            ..orderBy([(t) => OrderingTerm.asc(t.birthDate)]))
+          .get();
 
   Future<List<AnimalsTableData>> getPendingAnimals(String userId) =>
       (select(animalsTable)
@@ -262,6 +412,14 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.desc(t.date)]))
           .watch();
 
+  Future<List<ExpensesTableData>> getExpensesForAnimal(
+          String userId, String animalId) =>
+      (select(expensesTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.linkedAnimalId.equals(animalId))
+            ..orderBy([(t) => OrderingTerm.desc(t.date)]))
+          .get();
+
   Future<int> insertExpense(ExpensesTableCompanion entry) =>
       into(expensesTable).insert(entry);
 
@@ -270,6 +428,52 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> deleteExpense(String id) =>
       (delete(expensesTable)..where((t) => t.id.equals(id))).go();
+
+  /// Deletes all expenses linked to [animalId] and returns their IDs so the
+  /// caller can also remove them from Firestore.
+  Future<List<String>> deleteExpensesForAnimal(
+      String userId, String animalId) async {
+    final rows = await (select(expensesTable)
+          ..where((t) =>
+              t.userId.equals(userId) & t.linkedAnimalId.equals(animalId)))
+        .get();
+    final ids = rows.map((r) => r.id).toList();
+    await (delete(expensesTable)
+          ..where((t) =>
+              t.userId.equals(userId) & t.linkedAnimalId.equals(animalId)))
+        .go();
+    return ids;
+  }
+
+  /// Deletes all sales linked to [animalId] and returns their IDs so the
+  /// caller can also remove them from Firestore.
+  Future<List<String>> deleteSalesForAnimal(
+      String userId, String animalId) async {
+    final rows = await (select(salesTable)
+          ..where((t) =>
+              t.userId.equals(userId) & t.linkedAnimalId.equals(animalId)))
+        .get();
+    final ids = rows.map((r) => r.id).toList();
+    await (delete(salesTable)
+          ..where((t) =>
+              t.userId.equals(userId) & t.linkedAnimalId.equals(animalId)))
+        .go();
+    return ids;
+  }
+
+  /// Re-points every expense linked to [fromSpeciesId] to [toSpeciesId]. Used
+  /// when merging duplicate species.
+  Future<void> reassignExpensesSpecies(
+      String userId, String fromSpeciesId, String toSpeciesId) async {
+    await (update(expensesTable)
+          ..where((t) =>
+              t.userId.equals(userId) &
+              t.linkedSpeciesId.equals(fromSpeciesId)))
+        .write(ExpensesTableCompanion(
+      linkedSpeciesId: Value(toSpeciesId),
+      syncStatus: const Value('pending'),
+    ));
+  }
 
   Future<List<ExpensesTableData>> getPendingExpenses(String userId) =>
       (select(expensesTable)
@@ -317,6 +521,14 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.desc(t.saleDate)]))
           .watch();
 
+  Future<List<SalesTableData>> getSalesForAnimal(
+          String userId, String animalId) =>
+      (select(salesTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.linkedAnimalId.equals(animalId))
+            ..orderBy([(t) => OrderingTerm.desc(t.saleDate)]))
+          .get();
+
   Future<int> insertSale(SalesTableCompanion entry) =>
       into(salesTable).insert(entry);
 
@@ -339,6 +551,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ─── Reproduction events ───────────────────────────────────────────────────
+
+  Future<List<ReproductionEventsTableData>> getAllReproductionForAnimal(
+          String userId, String animalId) =>
+      (select(reproductionEventsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.animalId.equals(animalId)))
+          .get();
 
   Stream<List<ReproductionEventsTableData>> watchReproductionForAnimal(
           String userId, String animalId) =>
@@ -395,6 +614,40 @@ class AppDatabase extends _$AppDatabase {
       const HealthEventsTableCompanion(syncStatus: Value('synced')),
     );
   }
+
+  // One-shot health events for an animal (used by rating provider)
+  Future<List<HealthEventsTableData>> getHealthEventsForAnimal(
+          String userId, String animalId) =>
+      (select(healthEventsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.animalId.equals(animalId))
+            ..orderBy([(t) => OrderingTerm.asc(t.date)]))
+          .get();
+
+  // One-shot weight measurements for an animal (used by rating provider)
+  Future<List<WeightMeasurementsTableData>> getWeightMeasurementsForAnimalOnce(
+          String userId, String animalId) =>
+      (select(weightMeasurementsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.animalId.equals(animalId))
+            ..orderBy([(t) => OrderingTerm.asc(t.measurementDate)]))
+          .get();
+
+  // All reproduction events for a user — used to build peer portée map
+  Future<List<ReproductionEventsTableData>> getAllReproductionEventsForUser(
+          String userId) =>
+      (select(reproductionEventsTable)
+            ..where((t) => t.userId.equals(userId)))
+          .get();
+
+  // All animals for a user — used by ranking screen
+  Future<List<AnimalsTableData>> getAllAnimals(String userId) =>
+      (select(animalsTable)..where((t) => t.userId.equals(userId))).get();
+
+  // All health events for a user — used by ranking screen
+  Future<List<HealthEventsTableData>> getAllHealthEventsForUser(
+          String userId) =>
+      (select(healthEventsTable)..where((t) => t.userId.equals(userId))).get();
 
   // ─── Reminders ─────────────────────────────────────────────────────────────
 
@@ -482,6 +735,7 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> restoreFromCloud({
     required List<Species> species,
+    required List<Breed> breeds,
     required List<Animal> animals,
     required List<FarmField> fields,
     required List<Crop> crops,
@@ -491,12 +745,16 @@ class AppDatabase extends _$AppDatabase {
     required List<HealthEvent> healthEvents,
     required List<Reminder> reminders,
     required List<HistoryEntry> history,
+    required List<WeightMeasurement> weightMeasurements,
     required Map<String, dynamic>? counterByPrefixYear, // map "PREFIX-YEAR" -> int
     required UserSettings? settings,
   }) async {
     await transaction(() async {
       for (final s in species) {
         await into(speciesTable).insertOnConflictUpdate(_speciesToCompanion(s));
+      }
+      for (final b in breeds) {
+        await into(breedsTable).insertOnConflictUpdate(_breedToCompanion(b));
       }
       for (final a in animals) {
         await into(animalsTable).insertOnConflictUpdate(_animalToCompanion(a));
@@ -522,6 +780,21 @@ class AppDatabase extends _$AppDatabase {
       }
       for (final r in reminders) {
         await into(remindersTable).insertOnConflictUpdate(_reminderToCompanion(r));
+      }
+      for (final m in weightMeasurements) {
+        await into(weightMeasurementsTable).insertOnConflictUpdate(
+          WeightMeasurementsTableCompanion(
+            id: Value(m.id),
+            userId: Value(m.userId),
+            animalId: Value(m.animalId),
+            weight: Value(m.weight),
+            measurementDate: Value(m.measurementDate),
+            notes: Value(m.notes),
+            createdAt: Value(m.createdAt),
+            updatedAt: Value(m.updatedAt),
+            syncStatus: const Value('synced'),
+          ),
+        );
       }
       for (final h in history) {
         await into(historyTable).insertOnConflictUpdate(
@@ -628,6 +901,8 @@ class AppDatabase extends _$AppDatabase {
     final h = await getPendingHealthEvents(userId);
     final rm = await getPendingReminders(userId);
     final hi = await getPendingHistory(userId);
+    final br = await getPendingBreeds(userId);
+    final wm = await getPendingWeightMeasurements(userId);
 
     return a.length +
         e.length +
@@ -638,13 +913,25 @@ class AppDatabase extends _$AppDatabase {
         r.length +
         h.length +
         rm.length +
-        hi.length;
+        hi.length +
+        br.length +
+        wm.length;
   }
 
   String _dateOnly(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   // ─── Companion builders for restore ────────────────────────────────────────
+
+  BreedsTableCompanion _breedToCompanion(Breed b) => BreedsTableCompanion(
+        id: Value(b.id),
+        userId: Value(b.userId),
+        speciesId: Value(b.speciesId),
+        name: Value(b.name),
+        createdAt: Value(b.createdAt),
+        updatedAt: Value(b.updatedAt),
+        syncStatus: const Value('synced'),
+      );
 
   SpeciesTableCompanion _speciesToCompanion(Species s) => SpeciesTableCompanion(
         id: Value(s.id),
@@ -685,6 +972,9 @@ class AppDatabase extends _$AppDatabase {
         deathCause: Value(a.deathCause),
         deathNotes: Value(a.deathNotes),
         notes: Value(a.notes),
+        financeOwnerId: Value(a.effectiveFinanceOwnerId),
+        financeMode: Value(a.effectiveFinanceMode),
+        birthEventId: Value(a.birthEventId),
         createdAt: Value(a.createdAt),
         updatedAt: Value(a.updatedAt),
         syncStatus: const Value('synced'),
@@ -825,6 +1115,32 @@ class AppDatabase extends _$AppDatabase {
 
 // ─── Extension helpers ─────────────────────────────────────────────────────
 
+extension BreedDataExt on BreedsTableData {
+  Breed toModel() => Breed(
+        id: id,
+        userId: userId,
+        speciesId: speciesId,
+        name: name,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        syncStatus: syncStatus,
+      );
+}
+
+extension WeightMeasurementDataExt on WeightMeasurementsTableData {
+  WeightMeasurement toModel() => WeightMeasurement(
+        id: id,
+        userId: userId,
+        animalId: animalId,
+        weight: weight,
+        measurementDate: measurementDate,
+        notes: notes,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        syncStatus: syncStatus,
+      );
+}
+
 extension SpeciesDataExt on SpeciesTableData {
   Species toModel() => Species(
         id: id,
@@ -867,6 +1183,9 @@ extension AnimalDataExt on AnimalsTableData {
         deathCause: deathCause,
         deathNotes: deathNotes,
         notes: notes,
+        financeOwnerId: financeOwnerId ?? id,
+        financeMode: financeMode,
+        birthEventId: birthEventId,
         createdAt: createdAt,
         updatedAt: updatedAt,
         syncStatus: syncStatus,
