@@ -93,15 +93,15 @@ void main() {
     });
 
     group('productivite', () {
-      test('2 births in 2 years from mating start → 1.0/yr → 3 stars', () {
+      test('2 births in 2 years from mating start → ~1.0/yr → 3 stars', () {
         final female = _female(id: 'f1');
         final r = _compute(
           female: female,
-          endDate: DateTime(2024, 6, 1),
+          endDate: DateTime(2024, 1, 1),
           events: [
-            _mating(date: '2022-06-01'),
-            _birth(date: '2023-01-01'),
-            _birth(date: '2023-12-01'),
+            _mating(date: '2022-01-01'),
+            _birth(date: '2022-08-01'),
+            _birth(date: '2023-07-01'),
           ],
         );
         expect(r.productiviteScore, 3.0);
@@ -111,11 +111,11 @@ void main() {
       test('2 births in 1 year → ≥2/yr → 5 stars', () {
         final r = _compute(
           female: _female(),
-          endDate: DateTime(2023, 7, 1),
+          endDate: DateTime(2023, 6, 1),
           events: [
             _mating(date: '2022-06-01'),
             _birth(date: '2023-01-01'),
-            _birth(date: '2023-06-01'),
+            _birth(date: '2023-05-01'),
           ],
         );
         expect(r.productiviteScore, 5.0);

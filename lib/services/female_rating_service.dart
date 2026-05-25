@@ -73,11 +73,12 @@ class FemaleRatingService {
     if (years <= 0) return (null, null);
 
     final birthsPerYear = birthEvents.length / years;
+    final rate = birthsPerYear + 1e-9;
     double score;
-    if (birthsPerYear >= 1.75) score = 5;
-    else if (birthsPerYear >= 1.25) score = 4;
-    else if (birthsPerYear >= 0.9) score = 3;
-    else if (birthsPerYear >= 0.5) score = 2;
+    if (rate >= 2.0) score = 5;
+    else if (rate >= 1.5) score = 4;
+    else if (rate >= 1.0) score = 3;
+    else if (rate >= 0.5) score = 2;
     else score = 1;
 
     return (score, birthsPerYear);
