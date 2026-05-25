@@ -38,26 +38,24 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(species?.nameFr ?? 'Animaux'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.emoji_events_outlined),
+            tooltip: 'Classement femelles',
+            onPressed: () => context.push('/animals/ranking'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Modifier l\'espèce',
+            onPressed: () =>
+                context.push('/animals/species/edit/${widget.speciesId}'),
+          ),
+        ],
       ),
       body: animalsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur : $e')),
         data: (all) {
-          final query = _searchController.text.toLowerCase();
-          final filtered = query.isEmpty
-              ? all
-              : all
-                  .where((a) =>
-                      a.farmId.toLowerCase().contains(query) ||
-                      (a.nickname ?? '').toLowerCase().contains(query))
-                  .toList();
-          final active =
-              filtered.where((a) => a.status == AnimalStatus.active).toList();
-          final sold =
-              filtered.where((a) => a.status == AnimalStatus.sold).toList();
-          final dead =
-              filtered.where((a) => a.status == AnimalStatus.dead).toList();
-
           final expenses = allExpensesAsync.asData?.value ?? const [];
           final sales = allSalesAsync.asData?.value ?? const [];
           final animalIdsInSpecies = all.map((a) => a.id).toSet();
@@ -94,32 +92,56 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onChanged: (_) => setState(() {}),
                 ),
               ),
               Expanded(
-                child: filtered.isEmpty
-                    ? _empty()
-                    : ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        children: [
-                          if (active.isNotEmpty) ...[
-                            const _SectionLabel('Actifs'),
-                            _grid(active, species),
-                          ],
-                          if (sold.isNotEmpty)
-                            ExpansionTile(
-                              title: Text('Animaux vendus (${sold.length})'),
-                              children: [_grid(sold, species)],
-                            ),
-                          if (dead.isNotEmpty)
-                            ExpansionTile(
-                              title: Text('Animaux morts (${dead.length})'),
-                              children: [_grid(dead, species)],
-                            ),
-                          const SizedBox(height: 80),
-                        ],
-                      ),
+                child: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (context, value, _) {
+                    final query = value.text.toLowerCase();
+                    final filtered = query.isEmpty
+                        ? all
+                        : all
+                            .where((a) =>
+                                a.farmId.toLowerCase().contains(query) ||
+                                (a.nickname ?? '').toLowerCase().contains(query))
+                            .toList();
+                    final active = filtered
+                        .where((a) => a.status == AnimalStatus.active)
+                        .toList();
+                    final sold = filtered
+                        .where((a) => a.status == AnimalStatus.sold)
+                        .toList();
+                    final dead = filtered
+                        .where((a) => a.status == AnimalStatus.dead)
+                        .toList();
+                    return filtered.isEmpty
+                        ? _empty()
+                        : ListView(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                            children: [
+                              if (active.isNotEmpty) ...[
+                                const _SectionLabel('Actifs'),
+                                _grid(active, species),
+                              ],
+                              if (sold.isNotEmpty)
+                                ExpansionTile(
+                                  title:
+                                      Text('Animaux vendus (${sold.length})'),
+                                  children: [_grid(sold, species)],
+                                ),
+                              if (dead.isNotEmpty)
+                                ExpansionTile(
+                                  title:
+                                      Text('Animaux morts (${dead.length})'),
+                                  children: [_grid(dead, species)],
+                                ),
+                              const SizedBox(height: 80),
+                            ],
+                          );
+                  },
+                ),
               ),
             ],
           );
@@ -202,18 +224,17 @@ class _StatsBar extends StatelessWidget {
       color: Colors.grey[100],
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _stat('Actifs', '$active', AppColors.green),
-          _stat('Vendus', '$sold', AppColors.blue),
-          _stat('Morts', '$dead', AppColors.red),
-          _stat('Dépenses', '${spent.toStringAsFixed(0)} TND', AppColors.red),
-          _stat('Revenus', '${earned.toStringAsFixed(0)} TND', AppColors.green),
-          _stat(
+          Expanded(child: _stat('Actifs', '$active', AppColors.green)),
+          Expanded(child: _stat('Vendus', '$sold', AppColors.blue)),
+          Expanded(child: _stat('Morts', '$dead', AppColors.red)),
+          Expanded(child: _stat('Dépenses', '${spent.toStringAsFixed(0)} TND', AppColors.red)),
+          Expanded(child: _stat('Revenus', '${earned.toStringAsFixed(0)} TND', AppColors.green)),
+          Expanded(child: _stat(
             profit >= 0 ? 'Bénéfice' : 'Perte',
             '${profit.abs().toStringAsFixed(0)} TND',
             profit >= 0 ? AppColors.green : AppColors.red,
-          ),
+          )),
         ],
       ),
     );
@@ -223,8 +244,13 @@ class _StatsBar extends StatelessWidget {
         children: [
           Text(value,
               style: TextStyle(
-                  fontWeight: FontWeight.bold, color: color, fontSize: 13)),
-          Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  fontWeight: FontWeight.bold, color: color, fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center),
+          Text(label,
+              style: const TextStyle(fontSize: 9, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center),
         ],
       );
 }

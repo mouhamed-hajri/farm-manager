@@ -6,7 +6,10 @@ import 'providers/language_provider.dart';
 import 'screens/animals/add_edit_animal_screen.dart';
 import 'screens/animals/animal_list_screen.dart';
 import 'screens/animals/animal_profile_screen.dart';
+import 'screens/animals/female_ranking_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/signup_screen.dart';
+import 'screens/auth/verify_email_screen.dart';
 import 'screens/backup/backup_restore_screen.dart';
 import 'screens/cultures/add_edit_crop_screen.dart';
 import 'screens/cultures/add_edit_field_screen.dart';
@@ -31,16 +34,38 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/home',
     redirect: (context, state) {
-      final isLoggedIn = authState.value != null;
-      final isLoggingIn = state.matchedLocation == '/login';
-      if (!isLoggedIn && !isLoggingIn) return '/login';
-      if (isLoggedIn && isLoggingIn) return '/home';
+      final user = authState.value;
+      final loggedIn = user != null;
+      final verified = loggedIn && user.emailVerified;
+      final loc = state.matchedLocation;
+      final onLogin = loc == '/login';
+      final onSignup = loc == '/signup';
+      final onVerify = loc == '/verify-email';
+
+      if (!loggedIn) {
+        // Logged out: only the login and signup screens are reachable.
+        return (onLogin || onSignup) ? null : '/login';
+      }
+      if (!verified) {
+        // Logged in but email not verified: gate everything behind verify.
+        return onVerify ? null : '/verify-email';
+      }
+      // Logged in and verified: keep auth screens out of reach.
+      if (onLogin || onSignup || onVerify) return '/home';
       return null;
     },
     routes: [
       GoRoute(
         path: '/login',
         builder: (_, __) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/signup',
+        builder: (_, __) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (_, __) => const VerifyEmailScreen(),
       ),
       // Detail routes outside the shell so they push above bottom nav
       GoRoute(
@@ -60,6 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             speciesId: state.pathParameters['speciesId']!,
             motherId: extra?['motherId'],
             fatherId: extra?['fatherId'],
+            birthEventId: extra?['birthEventId'],
           );
         },
       ),
@@ -74,6 +100,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/animals/animal/:id',
         builder: (_, state) =>
             AnimalProfileScreen(animalId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/animals/ranking',
+        builder: (_, __) => const FemaleRankingScreen(),
       ),
       GoRoute(
         path: '/cultures/field/new',

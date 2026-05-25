@@ -9,7 +9,6 @@ import '../../providers/expense_provider.dart';
 import '../../providers/field_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/sale_provider.dart';
-import '../../providers/species_provider.dart';
 import '../../providers/sync_provider.dart' show syncStateProvider, SyncStatus;
 import '../../theme/app_theme.dart';
 import '../../widgets/stat_card.dart';
@@ -27,78 +26,91 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
 class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   bool _restoring = false;
   String _restoreMessage = '';
+  bool _initStarted = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoRestore());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initAccountData());
   }
 
-  // First-time-per-device restore: if this (device, uid) pair has never run a
-  // restore AND the cloud has data, pull it down before the user starts
-  // creating local records that would otherwise conflict with the cloud copy.
-  Future<void> _maybeAutoRestore() async {
+  // Runs once per launch after auth. On the first launch for a (device, uid)
+  // pair, if the cloud has data it is restored first. Default categories are
+  // seeded ONLY after that decision — seeding before a restore would create
+  // local defaults that the cloud copies then duplicate. Finally any duplicate
+  // categories left by older app versions are merged.
+  Future<void> _initAccountData() async {
+    if (_initStarted) return;
+    _initStarted = true;
+
     final user = ref.read(currentUserProvider);
     if (user == null) return;
     final prefs = await SharedPreferences.getInstance();
     final key = 'restored_user_${user.uid}';
-    if (prefs.getBool(key) == true) return;
+    final alreadyRestored = prefs.getBool(key) == true;
 
-    // Mark immediately so a fast tab-switch can't re-enter this method.
-    await prefs.setBool(key, true);
-
-    if (!mounted) return;
-    setState(() {
-      _restoring = true;
-      _restoreMessage = 'Vérification des sauvegardes…';
-    });
-
-    try {
-      final hasCloud = await ref
-          .read(firebaseServiceProvider)
-          .hasAnyCloudData(user.uid);
-      if (!hasCloud) {
-        // Nothing in cloud — likely a brand-new account, no restore needed.
+    if (!alreadyRestored) {
+      if (!mounted) return;
+      setState(() {
+        _restoring = true;
+        _restoreMessage = 'Vérification des sauvegardes…';
+      });
+      try {
+        final hasCloud =
+            await ref.read(firebaseServiceProvider).hasAnyCloudData(user.uid);
+        if (hasCloud) {
+          if (mounted) {
+            setState(() => _restoreMessage = 'Restauration de vos données…');
+          }
+          final result = await ref.read(syncStateProvider.notifier).restore();
+          if (result.success) {
+            await prefs.setBool(key, true);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                backgroundColor: AppColors.green,
+                content: Text(
+                    'Données restaurées : ${result.restoredAnimals} animaux, ${result.restoredExpenses} dépenses.'),
+              ));
+            }
+          } else {
+            // Restore failed — leave the flag unset so the next launch retries.
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                backgroundColor: AppColors.red,
+                content: Text(
+                    'Échec restauration : ${result.error ?? "inconnu"}'),
+              ));
+              setState(() => _restoring = false);
+            }
+            return;
+          }
+        } else {
+          // Nothing in cloud — brand-new account for this device.
+          await prefs.setBool(key, true);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            backgroundColor: AppColors.red,
+            content: Text('Erreur restauration : $e'),
+          ));
+          setState(() => _restoring = false);
+        }
         return;
       }
-      if (mounted) {
-        setState(() => _restoreMessage = 'Restauration de vos données…');
-      }
-      final result =
-          await ref.read(syncStateProvider.notifier).restore();
-      if (!mounted) return;
-      if (result.success) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: AppColors.green,
-          content: Text(
-              'Données restaurées : ${result.restoredAnimals} animaux, ${result.restoredExpenses} dépenses.'),
-        ));
-      } else {
-        // Restore failed — unset the flag so the next launch retries.
-        await prefs.remove(key);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: AppColors.red,
-          content: Text('Échec restauration : ${result.error ?? "inconnu"}'),
-        ));
-      }
-    } catch (e) {
-      await prefs.remove(key);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: AppColors.red,
-          content: Text('Erreur restauration : $e'),
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _restoring = false);
     }
+
+    // Seed defaults only after any restore has settled, then heal duplicates.
+    await ref.read(speciesRepositoryProvider).seedDefaultsIfEmpty(user.uid);
+    await ref.read(cropRepositoryProvider).seedDefaultsIfEmpty(user.uid);
+    await ref.read(settingsRepositoryProvider).getOrCreate(user.uid);
+    await ref.read(syncStateProvider.notifier).dedupeSpecies();
+
+    if (mounted) setState(() => _restoring = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Trigger seed of defaults once after auth.
-    ref.watch(speciesSeederProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('مزرعتي · Ma Ferme'),
@@ -296,6 +308,17 @@ class HomeTab extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 20),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.emoji_events, color: Colors.amber),
+              title: const Text('Classement femelles',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Voir les meilleures reproductrices'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/animals/ranking'),
+            ),
+          ),
+          const SizedBox(height: 8),
           const Text('Activités récentes',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -360,7 +383,11 @@ class _QuickActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: 18, color: color),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+            Flexible(
+              child: Text(label,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
       ),
@@ -386,6 +413,8 @@ class _HistoryTile extends StatelessWidget {
         subtitle: Text(
           entry.description?.isNotEmpty == true ? entry.description! : entry.date,
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
         ),
         dense: true,
       ),

@@ -1,18 +1,24 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../models/animal.dart';
+import '../models/female_rating.dart';
 import '../models/species.dart';
+import '../providers/core_providers.dart';
 import '../theme/app_theme.dart';
 
-class AnimalGridCard extends StatelessWidget {
+class AnimalGridCard extends ConsumerWidget {
   const AnimalGridCard({super.key, required this.animal, required this.species});
 
   final Animal animal;
   final Species? species;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final FemaleRating? rating = animal.gender == AnimalGender.female
+        ? ref.watch(femaleRatingProvider(animal.id)).asData?.value
+        : null;
     Color statusColor;
     String statusLabel;
     IconData statusIcon;
@@ -113,6 +119,35 @@ class AnimalGridCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // Star rating badge bottom-right (females only)
+                    if (rating?.composite != null)
+                      Positioned(
+                        bottom: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star,
+                                  color: Colors.amber, size: 10),
+                              const SizedBox(width: 2),
+                              Text(
+                                rating!.composite!.toStringAsFixed(1),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
