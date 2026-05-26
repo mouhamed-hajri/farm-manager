@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kLangKey = 'selected_language';
-const _supported = ['ar', 'fr'];
+const _supported = ['ar', 'fr', 'en', 'pt', 'ha'];
 
 final sharedPreferencesProvider =
     FutureProvider<SharedPreferences>((ref) => SharedPreferences.getInstance());

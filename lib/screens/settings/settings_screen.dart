@@ -381,6 +381,9 @@ class SettingsScreen extends ConsumerWidget {
     const languages = [
       ('ar', 'العربية', '🇸🇦'),
       ('fr', 'Français', '🇫🇷'),
+      ('en', 'English', '🇬🇧'),
+      ('pt', 'Português', '🇧🇷'),
+      ('ha', 'Hausa', '🇳🇬'),
     ];
     showModalBottomSheet(
       context: context,
