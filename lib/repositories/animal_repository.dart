@@ -138,6 +138,43 @@ class AnimalRepository {
     final now = DateTime.now().toIso8601String();
     final toSave = animal.copyWith(updatedAt: now, syncStatus: 'pending');
     await _db.updateAnimal(_toCompanion(toSave));
+
+    // Keep the auto-linked purchase expense in sync with the edited price/date.
+    final allExpenses = await _db.getExpensesForAnimal(animal.userId, animal.id);
+    final purchaseExpense = allExpenses
+        .where((e) => e.category == 'animal_purchase')
+        .firstOrNull;
+
+    final newPrice = animal.purchasePrice;
+    if (newPrice != null && newPrice > 0) {
+      if (purchaseExpense != null) {
+        await _expenseRepo.updateExpense(purchaseExpense.toModel().copyWith(
+          amount: newPrice,
+          date: animal.purchaseDate ?? now.substring(0, 10),
+          description: 'Achat de ${animal.displayName}',
+          updatedAt: now,
+          syncStatus: 'pending',
+        ));
+      } else {
+        await _expenseRepo.insertExpenseDirect(Expense(
+          id: _uuid.v4(),
+          userId: animal.userId,
+          scope: ExpenseScope.animal,
+          linkedAnimalId: animal.id,
+          linkedSpeciesId: animal.speciesId,
+          amount: newPrice,
+          category: 'animal_purchase',
+          date: animal.purchaseDate ?? now.substring(0, 10),
+          description: 'Achat de ${animal.displayName}',
+          createdAt: now,
+          updatedAt: now,
+          syncStatus: 'pending',
+        ));
+      }
+    } else if (purchaseExpense != null) {
+      await _expenseRepo.deleteExpense(purchaseExpense.id);
+    }
+
     return toSave;
   }
 
