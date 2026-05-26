@@ -30,6 +30,7 @@ class Animal {
   final String? birthEventId;
   final String? weaningDate;
   final double? valuationAmount;
+  final bool isBreeder;
   final String createdAt;
   final String updatedAt;
   final String syncStatus;
@@ -65,6 +66,7 @@ class Animal {
     this.birthEventId,
     this.weaningDate,
     this.valuationAmount,
+    this.isBreeder = false,
     required this.createdAt,
     required this.updatedAt,
     required this.syncStatus,
@@ -144,6 +146,7 @@ class Animal {
     String? birthEventId,
     String? weaningDate,
     double? valuationAmount,
+    bool? isBreeder,
     String? createdAt,
     String? updatedAt,
     String? syncStatus,
@@ -179,6 +182,7 @@ class Animal {
       birthEventId: birthEventId ?? this.birthEventId,
       weaningDate: weaningDate ?? this.weaningDate,
       valuationAmount: valuationAmount ?? this.valuationAmount,
+      isBreeder: isBreeder ?? this.isBreeder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -215,6 +219,7 @@ class Animal {
         'birthEventId': birthEventId,
         'weaningDate': weaningDate,
         'valuationAmount': valuationAmount,
+        'isBreeder': isBreeder,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -256,6 +261,7 @@ class Animal {
       birthEventId: map['birthEventId'] as String?,
       weaningDate: map['weaningDate'] as String?,
       valuationAmount: (map['valuationAmount'] as num?)?.toDouble(),
+      isBreeder: map['isBreeder'] as bool? ?? false,
       createdAt: map['createdAt'] as String,
       updatedAt: map['updatedAt'] as String,
       syncStatus: 'synced',

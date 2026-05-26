@@ -34,6 +34,8 @@ class AnimalsTable extends Table {
   TextColumn get birthEventId => text().nullable()();
   TextColumn get weaningDate => text().nullable()();
   RealColumn get valuationAmount => real().nullable()();
+  BoolColumn get isBreeder =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();

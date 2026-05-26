@@ -297,6 +297,12 @@ class AnimalRepository {
         daughterValuations[f.id] = f.valuationAmount!;
       }
     }
+    // Male breeders with a valuation credited to this ledger.
+    for (final m in maleOffspring) {
+      if (m.isBreeder && m.valuationAmount != null) {
+        daughterValuations[m.id] = m.valuationAmount!;
+      }
+    }
 
     return AnimalLedger(
       owner: owner,
@@ -361,6 +367,7 @@ class AnimalRepository {
         weaningDate: Value(a.weaningDate),
         valuationAmount:
             clearValuationAmount ? const Value(null) : Value(a.valuationAmount),
+        isBreeder: Value(a.isBreeder),
         createdAt: Value(a.createdAt),
         updatedAt: Value(a.updatedAt),
         syncStatus: Value(a.syncStatus),
@@ -403,5 +410,29 @@ class AnimalRepository {
       syncStatus: 'pending',
     );
     await _db.updateAnimal(_toCompanion(updated));
+  }
+
+  /// Designates a male as the group's breeder ram with an estimated valuation
+  /// that is credited to his mother's finance ledger.
+  Future<void> designateAsBreeder(Animal animal, double valuationAmount) async {
+    final now = DateTime.now().toIso8601String();
+    final updated = animal.copyWith(
+      isBreeder: true,
+      valuationAmount: valuationAmount,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _db.updateAnimal(_toCompanion(updated));
+  }
+
+  /// Removes breeder status and clears the valuation from the mother's ledger.
+  Future<void> removeBreederStatus(Animal animal) async {
+    final now = DateTime.now().toIso8601String();
+    final updated = animal.copyWith(
+      isBreeder: false,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _db.updateAnimal(_toCompanion(updated, clearValuationAmount: true));
   }
 }

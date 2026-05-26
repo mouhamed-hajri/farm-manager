@@ -162,6 +162,11 @@ class _FatherSelectionScreenState extends ConsumerState<FatherSelectionScreen> {
                       .toList();
                 }
                 males.sort((a, b) {
+                  // Breeders always first.
+                  final aBr = a.animal.isBreeder ? 0 : 1;
+                  final bBr = b.animal.isBreeder ? 0 : 1;
+                  if (aBr != bBr) return aBr - bBr;
+                  // Then by birth date ascending.
                   final ba = a.animal.birthDate;
                   final bb = b.animal.birthDate;
                   if (ba == null && bb == null) return 0;
@@ -275,6 +280,23 @@ class _MaleCard extends StatelessWidget {
                           fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (male.animal.isBreeder)
+                      Container(
+                        margin: const EdgeInsets.only(top: 2, bottom: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                              color: Colors.amber.withValues(alpha: 0.6)),
+                        ),
+                        child: const Text('⭐ Bélier',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold)),
+                      ),
                     if (male.animal.nickname?.isNotEmpty ?? false)
                       Text(
                         male.animal.nickname!,

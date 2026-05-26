@@ -151,6 +151,9 @@ class _InfoTab extends ConsumerWidget {
           // Finance toggle for female offspring
           if (animal.gender == AnimalGender.female && animal.motherId != null)
             _FemaleFinanceToggle(animal: animal),
+          // Breeder designation for male offspring
+          if (animal.gender == AnimalGender.male && animal.motherId != null)
+            _MaleBreederToggle(animal: animal),
           // Weaning button for any offspring not yet weaned
           if (animal.motherId != null && animal.weaningDate == null) ...[
             const SizedBox(height: 8),
@@ -614,6 +617,140 @@ class _ToggleBtn extends StatelessWidget {
   }
 }
 
+// ─── Male Breeder Toggle ──────────────────────────────────────────────────────
+
+class _MaleBreederToggle extends ConsumerWidget {
+  const _MaleBreederToggle({required this.animal});
+  final Animal animal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: animal.isBreeder
+          ? Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.6)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.star, color: Colors.amber, size: 16),
+                      SizedBox(width: 4),
+                      Text('Bélier du groupe',
+                          style: TextStyle(
+                              color: Colors.amber,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => _remove(context, ref),
+                  child: const Text('Retirer',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                ),
+              ],
+            )
+          : SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.star_outline, size: 18,
+                    color: Colors.amber),
+                label: const Text('Désigner comme bélier',
+                    style: TextStyle(color: Colors.amber)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.amber),
+                ),
+                onPressed: () => _designate(context, ref),
+              ),
+            ),
+    );
+  }
+
+  Future<void> _designate(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Valeur estimée du bélier'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Entrez la valeur estimée de ce mâle.\nCe montant sera crédité à la mère.',
+                style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Montant (TND)',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.white),
+            onPressed: () {
+              final v = double.tryParse(controller.text.trim());
+              if (v != null && v > 0) Navigator.pop(ctx, v);
+            },
+            child: const Text('Confirmer'),
+          ),
+        ],
+      ),
+    );
+    if (amount != null && context.mounted) {
+      await ref
+          .read(animalRepositoryProvider)
+          .designateAsBreeder(animal, amount);
+    }
+  }
+
+  Future<void> _remove(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Retirer le statut de bélier ?'),
+        content: const Text(
+            'La valeur estimée sera supprimée et le crédit retiré de la fiche de la mère.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirmer')),
+        ],
+      ),
+    );
+    if (ok == true && context.mounted) {
+      await ref
+          .read(animalRepositoryProvider)
+          .removeBreederStatus(animal);
+    }
+  }
+}
+
 // ─── Finance Tab ──────────────────────────────────────────────────────────────
 
 class _FinanceTab extends ConsumerWidget {
@@ -767,25 +904,35 @@ class _LedgerView extends StatelessWidget {
                   )),
           const SizedBox(height: 12),
         ],
-        // Daughter valuations credited to this ledger
+        // Offspring valuations credited to this ledger (independent daughters + male breeders)
         if (ledger.daughterValuations.isNotEmpty) ...[
-          const Text('Valeurs femelles indépendantes',
+          const Text('Valeurs créditées',
               style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          ...ledger.femaleOffspring
-              .where((f) =>
-                  ledger.daughterValuations.containsKey(f.id))
-              .map((f) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.add_circle_outline,
-                        color: AppColors.green, size: 18),
-                    title: Text(
-                        '+${ledger.daughterValuations[f.id]!.toStringAsFixed(0)} TND · ${f.farmId}',
-                        style: const TextStyle(fontFamily: 'monospace')),
-                    subtitle: const Text('Valeur estimée (indépendante)',
-                        style: TextStyle(fontSize: 11)),
-                  )),
+          ...() {
+            final allOffspring = [
+              ...ledger.femaleOffspring,
+              ...ledger.maleOffspring,
+            ];
+            return allOffspring
+                .where((a) => ledger.daughterValuations.containsKey(a.id))
+                .map((a) {
+              final isMale = a.gender == AnimalGender.male;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.add_circle_outline,
+                    color: isMale ? Colors.amber : AppColors.green,
+                    size: 18),
+                title: Text(
+                    '+${ledger.daughterValuations[a.id]!.toStringAsFixed(0)} TND · ${a.farmId}',
+                    style: const TextStyle(fontFamily: 'monospace')),
+                subtitle: Text(
+                    isMale ? 'Valeur estimée (bélier)' : 'Valeur estimée (indépendante)',
+                    style: const TextStyle(fontSize: 11)),
+              );
+            });
+          }(),
           const SizedBox(height: 12),
         ],
         // Female offspring independent (finance center of their own)
