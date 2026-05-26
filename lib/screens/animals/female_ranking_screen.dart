@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import '../../models/animal.dart';
 import '../../models/female_rating.dart';
+import '../../models/species.dart';
 import '../../providers/core_providers.dart';
+import '../../providers/species_provider.dart';
 
 class FemaleRankingScreen extends ConsumerWidget {
   const FemaleRankingScreen({super.key});
@@ -14,31 +16,95 @@ class FemaleRankingScreen extends ConsumerWidget {
     if (user == null) return const SizedBox.shrink();
 
     final rankingAsync = ref.watch(femaleRankingProvider(user.uid));
+    final speciesAsync = ref.watch(speciesListProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Classement femelles')),
       body: rankingAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur : $e')),
-        data: (ranking) => ranking.isEmpty
-            ? const Center(
-                child: Text('Aucune femelle enregistrée',
-                    style: TextStyle(color: Colors.grey)))
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: ranking.length,
-                itemBuilder: (ctx, i) {
-                  final (animal, rating) = ranking[i];
-                  return _RankCard(
-                    rank: i + 1,
-                    animal: animal,
-                    rating: rating,
-                  );
-                },
-              ),
+        data: (ranking) {
+          // Keep only rated females
+          final rated = ranking
+              .where((r) => r.$2?.composite != null)
+              .toList();
+
+          if (rated.isEmpty) {
+            return const Center(
+              child: Text('Aucune femelle notée pour l\'instant',
+                  style: TextStyle(color: Colors.grey)));
+          }
+
+          // Build species name map
+          final speciesMap = <String, Species>{};
+          speciesAsync.whenData((list) {
+            for (final s in list) speciesMap[s.id] = s;
+          });
+
+          // Group by speciesId, preserving sort order (already sorted by composite desc)
+          final groups = <String, List<(Animal, FemaleRating)>>{};
+          final speciesOrder = <String>[];
+          for (final (animal, rating) in rated) {
+            if (!groups.containsKey(animal.speciesId)) {
+              groups[animal.speciesId] = [];
+              speciesOrder.add(animal.speciesId);
+            }
+            groups[animal.speciesId]!.add((animal, rating!));
+          }
+
+          // Build flat item list: header + cards per species
+          final items = <_Item>[];
+          for (final speciesId in speciesOrder) {
+            final group = groups[speciesId]!;
+            final species = speciesMap[speciesId];
+            items.add(_Item.header(species?.nameFr ?? speciesId));
+            for (int i = 0; i < group.length; i++) {
+              final (animal, rating) = group[i];
+              items.add(_Item.card(i + 1, animal, rating));
+            }
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            itemBuilder: (ctx, i) {
+              final item = items[i];
+              if (item.isHeader) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16, bottom: 8),
+                  child: Text(
+                    item.header!.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                );
+              }
+              return _RankCard(
+                rank: item.rank!,
+                animal: item.animal!,
+                rating: item.rating!,
+              );
+            },
+          );
+        },
       ),
     );
   }
+}
+
+class _Item {
+  _Item.header(String h) : isHeader = true, header = h, rank = null, animal = null, rating = null;
+  _Item.card(int r, Animal a, FemaleRating rt) : isHeader = false, header = null, rank = r, animal = a, rating = rt;
+
+  final bool isHeader;
+  final String? header;
+  final int? rank;
+  final Animal? animal;
+  final FemaleRating? rating;
 }
 
 class _RankCard extends StatelessWidget {
@@ -50,14 +116,12 @@ class _RankCard extends StatelessWidget {
 
   final int rank;
   final Animal animal;
-  final FemaleRating? rating;
+  final FemaleRating rating;
 
   @override
   Widget build(BuildContext context) {
-    final hasRating = rating?.composite != null;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: hasRating ? null : Colors.grey[900],
       child: ListTile(
         leading: Row(
           mainAxisSize: MainAxisSize.min,
@@ -65,9 +129,9 @@ class _RankCard extends StatelessWidget {
             SizedBox(
               width: 28,
               child: Text(
-                hasRating ? '#$rank' : '—',
-                style: TextStyle(
-                  color: hasRating ? Colors.amber : Colors.grey[600],
+                '#$rank',
+                style: const TextStyle(
+                  color: Colors.amber,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
@@ -79,27 +143,21 @@ class _RankCard extends StatelessWidget {
         ),
         title: Text(animal.displayName,
             style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: hasRating
-            ? Text(
-                _subtitle(rating!),
-                style: const TextStyle(fontSize: 11),
-              )
-            : Text('Pas encore notée',
-                style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-        trailing: hasRating
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _StarRow(score: rating!.composite!, size: 14),
-                  Text(
-                    rating!.composite!.toStringAsFixed(1),
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.green),
-                  ),
-                ],
-              )
-            : null,
+        subtitle: Text(
+          _subtitle(rating),
+          style: const TextStyle(fontSize: 11),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            _StarRow(score: rating.composite!, size: 14),
+            Text(
+              rating.composite!.toStringAsFixed(1),
+              style: const TextStyle(fontSize: 11, color: Colors.green),
+            ),
+          ],
+        ),
         onTap: () {},
       ),
     );

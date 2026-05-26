@@ -106,10 +106,44 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
       }
     }
 
+    // Auto-inherit breed from parents when creating offspring.
+    String? inheritedBreed;
+    if (widget.motherId != null) {
+      final mother = await ref.read(animalRepositoryProvider).getById(widget.motherId!);
+      final motherBreed = mother?.breed;
+      if (motherBreed != null && motherBreed.isNotEmpty) {
+        if (widget.fatherId != null) {
+          final father = await ref.read(animalRepositoryProvider).getById(widget.fatherId!);
+          final fatherBreed = father?.breed;
+          if (fatherBreed != null && fatherBreed.isNotEmpty && fatherBreed != motherBreed) {
+            // Different breeds → create / reuse combo breed.
+            final comboName = '$motherBreed × $fatherBreed';
+            inheritedBreed = comboName;
+            if (!breedNames.contains(comboName)) {
+              await ref.read(breedRepositoryProvider).addBreed(
+                userId: user.uid,
+                speciesId: widget.speciesId,
+                name: comboName,
+              );
+              breedNames.add(comboName);
+            }
+          } else {
+            inheritedBreed = motherBreed;
+          }
+        } else {
+          inheritedBreed = motherBreed;
+        }
+        if (inheritedBreed != null && !breedNames.contains(inheritedBreed)) {
+          breedNames.add(inheritedBreed);
+        }
+      }
+    }
+
     final preview = await ref.read(farmIdServiceProvider).preview(user.uid, species.idPrefix);
     if (mounted) setState(() {
       _farmIdPreview = preview;
       _breedNames = breedNames;
+      if (inheritedBreed != null) _selectedBreed = inheritedBreed;
     });
   }
 
