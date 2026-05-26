@@ -148,6 +148,48 @@ class _InfoTab extends ConsumerWidget {
           const SizedBox(height: 12),
         ],
         if (animal.status == AnimalStatus.active) ...[
+          // Finance toggle for female offspring
+          if (animal.gender == AnimalGender.female && animal.motherId != null)
+            _FemaleFinanceToggle(animal: animal),
+          // Weaning button for any offspring not yet weaned
+          if (animal.motherId != null && animal.weaningDate == null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.child_care, size: 18),
+                label: const Text('Enregistrer le sevrage'),
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null && context.mounted) {
+                    await ref.read(animalRepositoryProvider).recordWeaning(
+                          animal,
+                          picked.toIso8601String().substring(0, 10),
+                        );
+                  }
+                },
+              ),
+            ),
+          ],
+          if (animal.motherId != null && animal.weaningDate != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.child_care, size: 16, color: AppColors.green),
+                  const SizedBox(width: 6),
+                  Text('Sevré le ${animal.weaningDate}',
+                      style: const TextStyle(
+                          color: AppColors.green, fontSize: 13)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -402,6 +444,176 @@ class _InfoTab extends ConsumerWidget {
       );
 }
 
+// ─── Female Finance Toggle ────────────────────────────────────────────────────
+
+class _FemaleFinanceToggle extends ConsumerWidget {
+  const _FemaleFinanceToggle({required this.animal});
+  final Animal animal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isIndependent =
+        animal.effectiveFinanceMode == AnimalFinanceMode.independentFemaleCenter;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Mode financier',
+            style: TextStyle(fontSize: 13, color: Colors.grey)),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: _ToggleBtn(
+                label: 'Sous la mère',
+                icon: Icons.family_restroom,
+                selected: !isIndependent,
+                color: Colors.orange,
+                onTap: isIndependent
+                    ? () => _revert(context, ref)
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ToggleBtn(
+                label: 'Indépendante',
+                icon: Icons.star_outline,
+                selected: isIndependent,
+                color: AppColors.green,
+                onTap: isIndependent
+                    ? null
+                    : () => _makeIndependent(context, ref),
+              ),
+            ),
+          ],
+        ),
+        if (isIndependent && animal.valuationAmount != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Valeur estimée : ${animal.valuationAmount!.toStringAsFixed(0)} TND (créditée à la mère)',
+            style: const TextStyle(fontSize: 12, color: AppColors.green),
+          ),
+        ],
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Future<void> _makeIndependent(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Valeur estimée'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Entrez la valeur estimée de cette femelle.\nCe montant sera crédité à la mère.',
+                style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Montant (TND)',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler')),
+          ElevatedButton(
+            onPressed: () {
+              final v = double.tryParse(controller.text.trim());
+              if (v != null && v > 0) Navigator.pop(ctx, v);
+            },
+            child: const Text('Confirmer'),
+          ),
+        ],
+      ),
+    );
+    if (amount != null && context.mounted) {
+      await ref.read(animalRepositoryProvider).makeIndependent(animal, amount);
+    }
+  }
+
+  Future<void> _revert(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remettre sous la mère ?'),
+        content: const Text(
+            'La valeur estimée sera supprimée et le crédit retiré de la fiche de la mère.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirmer')),
+        ],
+      ),
+    );
+    if (ok == true && context.mounted) {
+      await ref.read(animalRepositoryProvider).makeCountedUnderMother(animal);
+    }
+  }
+}
+
+class _ToggleBtn extends StatelessWidget {
+  const _ToggleBtn({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.15) : Colors.transparent,
+          border: Border.all(
+              color: selected ? color : Colors.grey.withValues(alpha: 0.4),
+              width: selected ? 2 : 1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 20, color: selected ? color : Colors.grey),
+            const SizedBox(height: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal,
+                    color: selected ? color : Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Finance Tab ──────────────────────────────────────────────────────────────
 
 class _FinanceTab extends ConsumerWidget {
@@ -530,23 +742,81 @@ class _LedgerView extends StatelessWidget {
           ...ledger.maleOffspring.map((o) => _offspringCard(context, o)),
           const SizedBox(height: 12),
         ],
-        // Female offspring (independent)
-        if (ledger.femaleOffspring.isNotEmpty) ...[
+        // Female offspring counted under this animal
+        if (ledger.femaleOffspring
+            .where((f) => f.isCountedUnderMother)
+            .isNotEmpty) ...[
+          const Text('Femelles (sous la mère)',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          ...ledger.femaleOffspring
+              .where((f) => f.isCountedUnderMother)
+              .map((f) => Card(
+                    child: ListTile(
+                      leading: const Text('♀',
+                          style:
+                              TextStyle(fontSize: 22, color: Colors.orange)),
+                      title: Text(f.farmId,
+                          style: const TextStyle(fontFamily: 'monospace')),
+                      subtitle: const Text('Comptée ici',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.orange)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: () => context.push('/animals/animal/${f.id}'),
+                    ),
+                  )),
+          const SizedBox(height: 12),
+        ],
+        // Daughter valuations credited to this ledger
+        if (ledger.daughterValuations.isNotEmpty) ...[
+          const Text('Valeurs femelles indépendantes',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          ...ledger.femaleOffspring
+              .where((f) =>
+                  ledger.daughterValuations.containsKey(f.id))
+              .map((f) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.add_circle_outline,
+                        color: AppColors.green, size: 18),
+                    title: Text(
+                        '+${ledger.daughterValuations[f.id]!.toStringAsFixed(0)} TND · ${f.farmId}',
+                        style: const TextStyle(fontFamily: 'monospace')),
+                    subtitle: const Text('Valeur estimée (indépendante)',
+                        style: TextStyle(fontSize: 11)),
+                  )),
+          const SizedBox(height: 12),
+        ],
+        // Female offspring independent (finance center of their own)
+        if (ledger.femaleOffspring
+            .where((f) =>
+                f.effectiveFinanceMode ==
+                AnimalFinanceMode.independentFemaleCenter)
+            .isNotEmpty) ...[
           const Text('Femelles indépendantes',
               style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          ...ledger.femaleOffspring.map((f) => Card(
-                child: ListTile(
-                  leading: const Text('♀',
-                      style: TextStyle(fontSize: 22, color: AppColors.green)),
-                  title: Text(f.farmId,
-                      style: const TextStyle(fontFamily: 'monospace')),
-                  subtitle: const Text('Centre financier indépendant',
-                      style: TextStyle(fontSize: 12, color: Colors.teal)),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                  onTap: () => context.push('/animals/animal/${f.id}'),
-                ),
-              )),
+          ...ledger.femaleOffspring
+              .where((f) =>
+                  f.effectiveFinanceMode ==
+                  AnimalFinanceMode.independentFemaleCenter)
+              .map((f) => Card(
+                    child: ListTile(
+                      leading: const Text('♀',
+                          style: TextStyle(
+                              fontSize: 22, color: AppColors.green)),
+                      title: Text(f.farmId,
+                          style: const TextStyle(fontFamily: 'monospace')),
+                      subtitle: const Text('Centre financier indépendant',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.teal)),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: () =>
+                          context.push('/animals/animal/${f.id}'),
+                    ),
+                  )),
         ],
       ],
     );
@@ -1036,14 +1306,12 @@ class _OffspringChip extends ConsumerWidget {
             Text(isMale ? '♂ Mâle' : '♀ Femelle',
                 style: const TextStyle(fontSize: 10)),
             Text(
-              isMale && isCountedUnder
-                  ? 'Compté ici'
+              isCountedUnder
+                  ? 'Sous la mère'
                   : (!isMale ? 'Indépendante' : ''),
               style: TextStyle(
                   fontSize: 9,
-                  color: isMale && isCountedUnder
-                      ? Colors.orange
-                      : Colors.teal),
+                  color: isCountedUnder ? Colors.orange : Colors.teal),
             ),
           ],
         ),

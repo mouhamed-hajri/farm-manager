@@ -65,8 +65,8 @@ class AnimalRepository {
         financeMode = AnimalFinanceMode.countedUnderMother;
         financeOwnerId = animal.motherId!;
       } else if (animal.gender == AnimalGender.female && animal.motherId != null) {
-        financeMode = AnimalFinanceMode.independentFemaleCenter;
-        financeOwnerId = id;
+        financeMode = AnimalFinanceMode.countedUnderMother;
+        financeOwnerId = animal.motherId!;
       } else {
         financeMode = AnimalFinanceMode.self;
         financeOwnerId = id;
@@ -290,6 +290,14 @@ class AnimalRepository {
           .toList();
     }
 
+    final daughterValuations = <String, double>{};
+    for (final f in femaleOffspring) {
+      if (f.effectiveFinanceMode == AnimalFinanceMode.independentFemaleCenter &&
+          f.valuationAmount != null) {
+        daughterValuations[f.id] = f.valuationAmount!;
+      }
+    }
+
     return AnimalLedger(
       owner: owner,
       maleOffspring: maleOffspring,
@@ -298,6 +306,7 @@ class AnimalRepository {
       offspringExpenses: offspringExp,
       ownerSales: ownerSal,
       offspringSales: offspringSal,
+      daughterValuations: daughterValuations,
     );
   }
 
@@ -318,7 +327,9 @@ class AnimalRepository {
 
   Future<void> markSynced(String id) => _db.markAnimalSynced(id);
 
-  AnimalsTableCompanion _toCompanion(Animal a) => AnimalsTableCompanion(
+  AnimalsTableCompanion _toCompanion(Animal a,
+          {bool clearValuationAmount = false}) =>
+      AnimalsTableCompanion(
         id: Value(a.id),
         userId: Value(a.userId),
         speciesId: Value(a.speciesId),
@@ -347,8 +358,50 @@ class AnimalRepository {
         financeOwnerId: Value(a.effectiveFinanceOwnerId),
         financeMode: Value(a.effectiveFinanceMode),
         birthEventId: Value(a.birthEventId),
+        weaningDate: Value(a.weaningDate),
+        valuationAmount:
+            clearValuationAmount ? const Value(null) : Value(a.valuationAmount),
         createdAt: Value(a.createdAt),
         updatedAt: Value(a.updatedAt),
         syncStatus: Value(a.syncStatus),
       );
+
+  /// Marks a female offspring as independent with an assumed valuation.
+  /// Credits the mother's ledger with [valuationAmount].
+  Future<void> makeIndependent(Animal animal, double valuationAmount) async {
+    final now = DateTime.now().toIso8601String();
+    final updated = animal.copyWith(
+      financeMode: AnimalFinanceMode.independentFemaleCenter,
+      financeOwnerId: animal.id,
+      valuationAmount: valuationAmount,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _db.updateAnimal(_toCompanion(updated));
+  }
+
+  /// Reverts a female offspring back to "counted under mother".
+  /// Clears [valuationAmount] so the credit is removed from mother's ledger.
+  Future<void> makeCountedUnderMother(Animal animal) async {
+    final now = DateTime.now().toIso8601String();
+    final updated = animal.copyWith(
+      financeMode: AnimalFinanceMode.countedUnderMother,
+      financeOwnerId: animal.motherId ?? animal.id,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _db.updateAnimal(
+        _toCompanion(updated, clearValuationAmount: true));
+  }
+
+  /// Records the weaning date on an offspring.
+  Future<void> recordWeaning(Animal animal, String weaningDate) async {
+    final now = DateTime.now().toIso8601String();
+    final updated = animal.copyWith(
+      weaningDate: weaningDate,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _db.updateAnimal(_toCompanion(updated));
+  }
 }

@@ -28,6 +28,8 @@ class Animal {
   final String? financeOwnerId;
   final String? financeMode;
   final String? birthEventId;
+  final String? weaningDate;
+  final double? valuationAmount;
   final String createdAt;
   final String updatedAt;
   final String syncStatus;
@@ -61,6 +63,8 @@ class Animal {
     this.financeOwnerId,
     this.financeMode,
     this.birthEventId,
+    this.weaningDate,
+    this.valuationAmount,
     required this.createdAt,
     required this.updatedAt,
     required this.syncStatus,
@@ -138,6 +142,8 @@ class Animal {
     String? financeOwnerId,
     String? financeMode,
     String? birthEventId,
+    String? weaningDate,
+    double? valuationAmount,
     String? createdAt,
     String? updatedAt,
     String? syncStatus,
@@ -171,6 +177,8 @@ class Animal {
       financeOwnerId: financeOwnerId ?? this.financeOwnerId,
       financeMode: financeMode ?? this.financeMode,
       birthEventId: birthEventId ?? this.birthEventId,
+      weaningDate: weaningDate ?? this.weaningDate,
+      valuationAmount: valuationAmount ?? this.valuationAmount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -205,6 +213,8 @@ class Animal {
         'financeOwnerId': effectiveFinanceOwnerId,
         'financeMode': effectiveFinanceMode,
         'birthEventId': birthEventId,
+        'weaningDate': weaningDate,
+        'valuationAmount': valuationAmount,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -244,6 +254,8 @@ class Animal {
       financeOwnerId: map['financeOwnerId'] as String? ?? computedOwner,
       financeMode: map['financeMode'] as String? ?? computedMode,
       birthEventId: map['birthEventId'] as String?,
+      weaningDate: map['weaningDate'] as String?,
+      valuationAmount: (map['valuationAmount'] as num?)?.toDouble(),
       createdAt: map['createdAt'] as String,
       updatedAt: map['updatedAt'] as String,
       syncStatus: 'synced',
@@ -252,8 +264,7 @@ class Animal {
 }
 
 String _defaultFinanceMode(String gender, String? motherId) {
-  if (gender == 'male' && motherId != null) return AnimalFinanceMode.countedUnderMother;
-  if (gender == 'female' && motherId != null) return AnimalFinanceMode.independentFemaleCenter;
+  if (motherId != null) return AnimalFinanceMode.countedUnderMother;
   return AnimalFinanceMode.self;
 }
 

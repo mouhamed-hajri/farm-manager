@@ -10,6 +10,8 @@ class AnimalLedger {
   final Map<String, List<Expense>> offspringExpenses;
   final List<Sale> ownerSales;
   final Map<String, List<Sale>> offspringSales;
+  // Daughters that became independent: maps daughter id → assumed valuation credited to this ledger.
+  final Map<String, double> daughterValuations;
 
   const AnimalLedger({
     required this.owner,
@@ -19,6 +21,7 @@ class AnimalLedger {
     required this.offspringExpenses,
     required this.ownerSales,
     required this.offspringSales,
+    this.daughterValuations = const {},
   });
 
   double get totalExpenses {
@@ -34,6 +37,7 @@ class AnimalLedger {
     for (final sales in offspringSales.values) {
       total += sales.fold<double>(0, (s, e) => s + e.totalPrice);
     }
+    total += daughterValuations.values.fold<double>(0, (s, v) => s + v);
     return total;
   }
 

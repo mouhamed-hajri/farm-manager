@@ -50,7 +50,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -86,6 +86,10 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 5) {
             await m.createTable(weightMeasurementsTable);
+          }
+          if (from < 6) {
+            await m.addColumn(animalsTable, animalsTable.weaningDate);
+            await m.addColumn(animalsTable, animalsTable.valuationAmount);
           }
         },
       );
@@ -1186,6 +1190,8 @@ extension AnimalDataExt on AnimalsTableData {
         financeOwnerId: financeOwnerId ?? id,
         financeMode: financeMode,
         birthEventId: birthEventId,
+        weaningDate: weaningDate,
+        valuationAmount: valuationAmount,
         createdAt: createdAt,
         updatedAt: updatedAt,
         syncStatus: syncStatus,

@@ -32,6 +32,8 @@ class AnimalsTable extends Table {
   TextColumn get financeOwnerId => text().nullable()();
   TextColumn get financeMode => text().withDefault(const Constant('self'))();
   TextColumn get birthEventId => text().nullable()();
+  TextColumn get weaningDate => text().nullable()();
+  RealColumn get valuationAmount => real().nullable()();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
