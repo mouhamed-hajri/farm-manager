@@ -956,7 +956,16 @@ class _ReproductionTab extends ConsumerWidget {
                   final bDate = b.value
                       .map((e) => e.eventDate)
                       .reduce((x, y) => x.compareTo(y) > 0 ? x : y);
-                  return bDate.compareTo(aDate);
+                  final dateCmp = bDate.compareTo(aDate);
+                  if (dateCmp != 0) return dateCmp;
+                  // Tiebreaker: newest createdAt on top.
+                  final aCreated = a.value
+                      .map((e) => e.createdAt)
+                      .reduce((x, y) => x.compareTo(y) > 0 ? x : y);
+                  final bCreated = b.value
+                      .map((e) => e.createdAt)
+                      .reduce((x, y) => x.compareTo(y) > 0 ? x : y);
+                  return bCreated.compareTo(aCreated);
                 });
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
@@ -1562,7 +1571,29 @@ class _CroissanceSection extends ConsumerWidget {
 
   Widget _content(
       BuildContext context, WidgetRef ref, List<WeightMeasurement> list) {
-    if (list.isEmpty) {
+    // Prepend a synthetic birth-weight point if the animal has one and no
+    // measurement already exists for that date.
+    List<WeightMeasurement> effective = list;
+    if (animal.birthDate != null && (animal.weight ?? 0) > 0) {
+      final alreadyHasBirthEntry =
+          list.any((m) => m.measurementDate == animal.birthDate);
+      if (!alreadyHasBirthEntry) {
+        final birthEntry = WeightMeasurement(
+          id: '__birth__',
+          userId: animal.userId,
+          animalId: animal.id,
+          weight: animal.weight!,
+          measurementDate: animal.birthDate!,
+          notes: 'Poids à la naissance',
+          createdAt: animal.createdAt,
+          updatedAt: animal.createdAt,
+          syncStatus: 'synced',
+        );
+        effective = [birthEntry, ...list];
+      }
+    }
+
+    if (effective.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Text(
@@ -1572,7 +1603,7 @@ class _CroissanceSection extends ConsumerWidget {
       );
     }
 
-    final sorted = [...list]
+    final sorted = [...effective]
       ..sort((a, b) => a.measurementDate.compareTo(b.measurementDate));
     final birth = animal.birthDate != null
         ? DateTime.tryParse(animal.birthDate!)
@@ -1672,34 +1703,36 @@ class _CroissanceSection extends ConsumerWidget {
                   : Text(m.notes!,
                       style: const TextStyle(fontSize: 11),
                       overflow: TextOverflow.ellipsis),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    size: 18, color: Colors.grey),
-                onPressed: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Supprimer cette mesure ?'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Annuler')),
-                        ElevatedButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.red,
-                                foregroundColor: Colors.white),
-                            child: const Text('Supprimer')),
-                      ],
+              trailing: m.id == '__birth__'
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: Colors.grey),
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Supprimer cette mesure ?'),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Annuler')),
+                              ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.red,
+                                      foregroundColor: Colors.white),
+                                  child: const Text('Supprimer')),
+                            ],
+                          ),
+                        );
+                        if (ok == true) {
+                          await ref
+                              .read(weightMeasurementRepositoryProvider)
+                              .delete(m.id);
+                        }
+                      },
                     ),
-                  );
-                  if (ok == true) {
-                    await ref
-                        .read(weightMeasurementRepositoryProvider)
-                        .delete(m.id);
-                  }
-                },
-              ),
             )),
       ],
     );

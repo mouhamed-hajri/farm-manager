@@ -568,7 +568,10 @@ class AppDatabase extends _$AppDatabase {
       (select(reproductionEventsTable)
             ..where((t) =>
                 t.userId.equals(userId) & t.animalId.equals(animalId))
-            ..orderBy([(t) => OrderingTerm.desc(t.eventDate)]))
+            ..orderBy([
+              (t) => OrderingTerm.desc(t.eventDate),
+              (t) => OrderingTerm.desc(t.createdAt),
+            ]))
           .watch();
 
   Future<int> insertReproductionEvent(ReproductionEventsTableCompanion entry) =>
