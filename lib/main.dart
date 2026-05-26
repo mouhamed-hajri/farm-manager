@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,7 +19,9 @@ import 'repositories/reminder_repository.dart';
 import 'repositories/reproduction_event_repository.dart';
 import 'repositories/sale_repository.dart';
 import 'repositories/settings_repository.dart';
+import 'repositories/breed_repository.dart';
 import 'repositories/species_repository.dart';
+import 'repositories/weight_measurement_repository.dart';
 import 'services/farm_id_service.dart';
 import 'services/firebase_service.dart';
 import 'services/storage_service.dart';
@@ -50,20 +53,23 @@ void callbackDispatcher() {
         final historyRepo = HistoryRepository(db);
         final expenseRepo = ExpenseRepository(db);
         final farmIdSvc = FarmIdService(db);
+        final firebaseSvc = FirebaseService(FirebaseFirestore.instance);
+        final reproRepo = ReproductionEventRepository(db);
         final animalRepo =
-            AnimalRepository(db, expenseRepo, historyRepo, farmIdSvc);
+            AnimalRepository(db, expenseRepo, historyRepo, farmIdSvc, firebaseSvc, reproRepo);
         final fieldRepo = FieldRepository(db);
         final cropRepo = CropRepository(db);
-        final saleRepo = SaleRepository(db, historyRepo);
-        final reproRepo = ReproductionEventRepository(db);
+        final saleRepo = SaleRepository(db, historyRepo, reproRepo);
         final healthRepo = HealthEventRepository(db);
         final reminderRepo = ReminderRepository(db);
+        final breedRepo = BreedRepository(db);
+        final weightMeasurementRepo = WeightMeasurementRepository(db);
         final settingsRepo = SettingsRepository(db);
-        final firebaseSvc = FirebaseService(FirebaseFirestore.instance);
         final storageSvc = StorageService(_kCloudinaryConfig);
         final syncSvc = SyncService(
           db: db,
           animalRepo: animalRepo,
+          breedRepo: breedRepo,
           expenseRepo: expenseRepo,
           historyRepo: historyRepo,
           speciesRepo: speciesRepo,
@@ -74,6 +80,7 @@ void callbackDispatcher() {
           healthRepo: healthRepo,
           reminderRepo: reminderRepo,
           settingsRepo: settingsRepo,
+          weightMeasurementRepo: weightMeasurementRepo,
           firebaseService: firebaseSvc,
           storageService: storageSvc,
         );
@@ -91,6 +98,8 @@ void callbackDispatcher() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   await Firebase.initializeApp();
 
