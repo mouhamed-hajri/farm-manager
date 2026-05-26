@@ -327,11 +327,15 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen> {
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-                  color: color,
-                  fontSize: bold ? 16 : 14)),
+          Flexible(
+            child: Text(label,
+                style: TextStyle(
+                    fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+                    color: color,
+                    fontSize: bold ? 16 : 14),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
           Text(value,
               style: TextStyle(
                   fontWeight: bold ? FontWeight.bold : FontWeight.w600,
@@ -606,7 +610,8 @@ class _ExpenseTile extends StatelessWidget {
         leading: const Icon(Icons.money_off, color: AppColors.red),
         title: Text('${expense.amount.toStringAsFixed(0)} TND',
             style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('$label · ${expense.category} · ${expense.date}'),
+        subtitle: Text('$label · ${expense.category} · ${expense.date}',
+            overflow: TextOverflow.ellipsis, maxLines: 2),
       ),
     );
   }
@@ -626,7 +631,8 @@ class _SaleTile extends StatelessWidget {
         title: Text('${sale.totalPrice.toStringAsFixed(0)} TND',
             style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.green)),
         subtitle: Text(
-            '${sale.quantity.toStringAsFixed(0)} ${_unitLabel(sale.unit)} · ${sale.saleDate}${sale.buyerName == null ? "" : " · ${sale.buyerName}"}'),
+            '${sale.quantity.toStringAsFixed(0)} ${_unitLabel(sale.unit)} · ${sale.saleDate}${sale.buyerName == null ? "" : " · ${sale.buyerName}"}',
+            overflow: TextOverflow.ellipsis, maxLines: 2),
       ),
     );
   }

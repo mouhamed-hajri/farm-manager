@@ -95,6 +95,9 @@ class ReproductionEvent {
 
 abstract class ReproductionEventType {
   static const mating = 'mating';
+  static const matingFailed = 'mating_failed';
   static const pregnancyConfirmed = 'pregnancy_confirmed';
+  static const pregnancyLoss = 'pregnancy_loss';
   static const birth = 'birth';
+  static const cycleCanceled = 'cycle_canceled';
 }

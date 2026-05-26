@@ -6,6 +6,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return SyncService(
     db: ref.watch(appDatabaseProvider),
     animalRepo: ref.watch(animalRepositoryProvider),
+    breedRepo: ref.watch(breedRepositoryProvider),
     expenseRepo: ref.watch(expenseRepositoryProvider),
     historyRepo: ref.watch(historyRepositoryProvider),
     speciesRepo: ref.watch(speciesRepositoryProvider),
@@ -16,6 +17,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     healthRepo: ref.watch(healthEventRepositoryProvider),
     reminderRepo: ref.watch(reminderRepositoryProvider),
     settingsRepo: ref.watch(settingsRepositoryProvider),
+    weightMeasurementRepo: ref.watch(weightMeasurementRepositoryProvider),
     firebaseService: ref.watch(firebaseServiceProvider),
     storageService: ref.watch(storageServiceProvider),
   );
@@ -100,6 +102,13 @@ class SyncNotifier extends StateNotifier<SyncState> {
     );
 
     return result;
+  }
+
+  /// Merges any duplicate animal categories left by older app versions.
+  Future<void> dedupeSpecies() async {
+    final user = _ref.read(currentUserProvider);
+    if (user == null) return;
+    await _ref.read(syncServiceProvider).dedupeSpecies(user.uid);
   }
 
   Future<void> refreshPendingCount() async {

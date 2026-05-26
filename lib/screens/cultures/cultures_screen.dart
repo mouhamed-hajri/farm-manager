@@ -143,21 +143,24 @@ class _FieldCard extends StatelessWidget {
                 ),
                 if (daysLeft != null) ...[
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: daysColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      daysLeft < 0
-                          ? 'Contrat expiré'
-                          : 'Expire dans $daysLeft j',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: daysColor,
-                          fontWeight: FontWeight.w600),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: daysColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        daysLeft < 0
+                            ? 'Contrat expiré'
+                            : 'Expire dans $daysLeft j',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: daysColor,
+                            fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -223,7 +226,8 @@ class _CropCard extends StatelessWidget {
             Text(crop.nameFr, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(crop.isYearRound
             ? 'Toute l\'année · ${crop.nameAr}'
-            : 'Saison: ${_seasonRange(crop.seasonMonths)} · ${crop.nameAr}'),
+            : 'Saison: ${_seasonRange(crop.seasonMonths)} · ${crop.nameAr}',
+            overflow: TextOverflow.ellipsis, maxLines: 2),
         onTap: () => context.push('/cultures/crop/${crop.id}'),
       ),
     );

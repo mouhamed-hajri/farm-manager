@@ -24,6 +24,10 @@ class Animal {
   final String? deathCause;
   final String? deathNotes;
   final String? notes;
+  // Finance fields
+  final String? financeOwnerId;
+  final String? financeMode;
+  final String? birthEventId;
   final String createdAt;
   final String updatedAt;
   final String syncStatus;
@@ -54,6 +58,9 @@ class Animal {
     this.deathCause,
     this.deathNotes,
     this.notes,
+    this.financeOwnerId,
+    this.financeMode,
+    this.birthEventId,
     required this.createdAt,
     required this.updatedAt,
     required this.syncStatus,
@@ -61,8 +68,19 @@ class Animal {
 
   String get displayName => nickname?.isNotEmpty == true ? nickname! : farmId;
 
+  // Effective finance owner — falls back to own id if field not yet set.
+  String get effectiveFinanceOwnerId => financeOwnerId ?? id;
+
+  // Effective finance mode — falls back to 'self'.
+  String get effectiveFinanceMode => financeMode ?? AnimalFinanceMode.self;
+
+  bool get isFinanceCenter =>
+      effectiveFinanceMode != AnimalFinanceMode.countedUnderMother;
+
+  bool get isCountedUnderMother =>
+      effectiveFinanceMode == AnimalFinanceMode.countedUnderMother;
+
   // Human-readable age from birthDate (ISO yyyy-MM-dd). Null if no birthDate.
-  // Returns short form: "3j" / "2 mois" / "1 an" / "2 ans 4 mois"
   String? get ageLabel {
     if (birthDate == null) return null;
     final birth = DateTime.tryParse(birthDate!);
@@ -117,6 +135,9 @@ class Animal {
     String? deathCause,
     String? deathNotes,
     String? notes,
+    String? financeOwnerId,
+    String? financeMode,
+    String? birthEventId,
     String? createdAt,
     String? updatedAt,
     String? syncStatus,
@@ -147,6 +168,9 @@ class Animal {
       deathCause: deathCause ?? this.deathCause,
       deathNotes: deathNotes ?? this.deathNotes,
       notes: notes ?? this.notes,
+      financeOwnerId: financeOwnerId ?? this.financeOwnerId,
+      financeMode: financeMode ?? this.financeMode,
+      birthEventId: birthEventId ?? this.birthEventId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -178,40 +202,65 @@ class Animal {
         'deathCause': deathCause,
         'deathNotes': deathNotes,
         'notes': notes,
+        'financeOwnerId': effectiveFinanceOwnerId,
+        'financeMode': effectiveFinanceMode,
+        'birthEventId': birthEventId,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
 
-  factory Animal.fromFirestore(Map<String, dynamic> map) => Animal(
-        id: map['id'] as String,
-        userId: map['userId'] as String,
-        speciesId: map['speciesId'] as String,
-        farmId: map['farmId'] as String,
-        nickname: map['nickname'] as String?,
-        gender: map['gender'] as String,
-        breed: map['breed'] as String?,
-        color: map['color'] as String?,
-        birthDate: map['birthDate'] as String?,
-        weight: (map['weight'] as num?)?.toDouble(),
-        healthStatus: map['healthStatus'] as String? ?? 'healthy',
-        status: map['status'] as String? ?? 'active',
-        purchaseDate: map['purchaseDate'] as String?,
-        purchasePrice: (map['purchasePrice'] as num?)?.toDouble(),
-        sellerName: map['sellerName'] as String?,
-        sellerPhone: map['sellerPhone'] as String?,
-        purchaseLocation: map['purchaseLocation'] as String?,
-        photoLocalPath: null,
-        photoCloudUrl: map['photoCloudUrl'] as String?,
-        motherId: map['motherId'] as String?,
-        fatherId: map['fatherId'] as String?,
-        deathDate: map['deathDate'] as String?,
-        deathCause: map['deathCause'] as String?,
-        deathNotes: map['deathNotes'] as String?,
-        notes: map['notes'] as String?,
-        createdAt: map['createdAt'] as String,
-        updatedAt: map['updatedAt'] as String,
-        syncStatus: 'synced',
-      );
+  factory Animal.fromFirestore(Map<String, dynamic> map) {
+    final gender = map['gender'] as String? ?? 'male';
+    final motherId = map['motherId'] as String?;
+    final id = map['id'] as String;
+    final computedMode = _defaultFinanceMode(gender, motherId);
+    final computedOwner = (gender == 'male' && motherId != null) ? motherId : id;
+    return Animal(
+      id: id,
+      userId: map['userId'] as String,
+      speciesId: map['speciesId'] as String,
+      farmId: map['farmId'] as String,
+      nickname: map['nickname'] as String?,
+      gender: gender,
+      breed: map['breed'] as String?,
+      color: map['color'] as String?,
+      birthDate: map['birthDate'] as String?,
+      weight: (map['weight'] as num?)?.toDouble(),
+      healthStatus: map['healthStatus'] as String? ?? 'healthy',
+      status: map['status'] as String? ?? 'active',
+      purchaseDate: map['purchaseDate'] as String?,
+      purchasePrice: (map['purchasePrice'] as num?)?.toDouble(),
+      sellerName: map['sellerName'] as String?,
+      sellerPhone: map['sellerPhone'] as String?,
+      purchaseLocation: map['purchaseLocation'] as String?,
+      photoLocalPath: null,
+      photoCloudUrl: map['photoCloudUrl'] as String?,
+      motherId: motherId,
+      fatherId: map['fatherId'] as String?,
+      deathDate: map['deathDate'] as String?,
+      deathCause: map['deathCause'] as String?,
+      deathNotes: map['deathNotes'] as String?,
+      notes: map['notes'] as String?,
+      financeOwnerId: map['financeOwnerId'] as String? ?? computedOwner,
+      financeMode: map['financeMode'] as String? ?? computedMode,
+      birthEventId: map['birthEventId'] as String?,
+      createdAt: map['createdAt'] as String,
+      updatedAt: map['updatedAt'] as String,
+      syncStatus: 'synced',
+    );
+  }
+}
+
+String _defaultFinanceMode(String gender, String? motherId) {
+  if (gender == 'male' && motherId != null) return AnimalFinanceMode.countedUnderMother;
+  if (gender == 'female' && motherId != null) return AnimalFinanceMode.independentFemaleCenter;
+  return AnimalFinanceMode.self;
+}
+
+abstract class AnimalFinanceMode {
+  static const self = 'self';
+  static const countedUnderMother = 'counted_under_mother';
+  static const independentFemaleCenter = 'independent_female_center';
 }
 
 abstract class AnimalGender {

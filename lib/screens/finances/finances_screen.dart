@@ -97,7 +97,8 @@ class _ExpenseRow extends StatelessWidget {
         title: Text('${expense.amount.toStringAsFixed(0)} TND',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(
-            '${_scopeLabel(expense.scope)} · ${expense.category} · ${expense.date}'),
+            '${_scopeLabel(expense.scope)} · ${expense.category} · ${expense.date}',
+            overflow: TextOverflow.ellipsis, maxLines: 2),
       ),
     );
   }
@@ -159,9 +160,15 @@ class _SaleRow extends StatelessWidget {
         title: Text('${sale.totalPrice.toStringAsFixed(0)} TND',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(
-            '${_scopeLabel(sale.scope)} · ${sale.quantity.toStringAsFixed(0)} ${_unitLabel(sale.unit)} · ${sale.saleDate}'),
-        trailing:
-            sale.buyerName != null ? Text(sale.buyerName!) : null,
+            '${_scopeLabel(sale.scope)} · ${sale.quantity.toStringAsFixed(0)} ${_unitLabel(sale.unit)} · ${sale.saleDate}',
+            overflow: TextOverflow.ellipsis, maxLines: 2),
+        trailing: sale.buyerName != null
+            ? ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 100),
+                child: Text(sale.buyerName!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)))
+            : null,
       ),
     );
   }

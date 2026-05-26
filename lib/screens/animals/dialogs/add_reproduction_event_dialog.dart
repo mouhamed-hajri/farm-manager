@@ -5,7 +5,9 @@ import '../../../models/animal.dart';
 import '../../../models/reproduction_event.dart';
 import '../../../providers/animal_provider.dart';
 import '../../../providers/core_providers.dart';
+import '../../../services/consanguinity_service.dart';
 import '../../../theme/app_theme.dart';
+import '../father_selection_screen.dart';
 
 class AddReproductionEventDialog extends ConsumerStatefulWidget {
   const AddReproductionEventDialog({
@@ -30,6 +32,7 @@ class _AddReproductionEventDialogState
   DateTime _eventDate = DateTime.now();
   DateTime? _dueDate;
   String? _partnerId;
+  String? _partnerFarmId;
   final _offspringCountController = TextEditingController(text: '1');
   final _notesController = TextEditingController();
   bool _loading = false;
@@ -60,11 +63,99 @@ class _AddReproductionEventDialogState
     if (d != null) on(d);
   }
 
+  Future<void> _pickFather() async {
+    final selected = await Navigator.of(context).push<Animal?>(
+      MaterialPageRoute(
+        builder: (_) => FatherSelectionScreen(
+          userId: widget.mother.userId,
+          speciesId: widget.mother.speciesId,
+          eventDate: _eventDate,
+        ),
+      ),
+    );
+    // `selected` is null when user picks "Père inconnu"
+    // Navigator.pop with null vs. not popping are differentiated by
+    // checking whether the route was actually popped.
+    setState(() {
+      _partnerId = selected?.id;
+      _partnerFarmId = selected?.farmId;
+    });
+  }
+
+  Future<bool> _showConsanguinityWarning(int distance) async {
+    final (label, color) = switch (distance) {
+      <= 1 => ('Relation directe (parent / enfant)', AppColors.red),
+      2 => ('Frères / sœurs — consanguinité très proche', AppColors.red),
+      3 => ('Apparentés à 3 générations', Colors.orange),
+      4 => ('Apparentés à 4 générations', Colors.orange),
+      _ => ('Apparentés à $distance générations', Colors.amber),
+    };
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: color),
+            const SizedBox(width: 8),
+            const Flexible(child: Text('Consanguinité détectée')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: color, fontWeight: FontWeight.w600, fontSize: 15)),
+            const SizedBox(height: 12),
+            const Text(
+              'Reproduire des animaux du même sang peut provoquer des '
+              'défauts génétiques chez les jeunes. Voulez-vous continuer ?',
+              style: TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Choisir un autre mâle'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: color, foregroundColor: Colors.white),
+            child: const Text('Continuer quand même'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   Future<void> _save() async {
     setState(() => _loading = true);
     try {
-      final groupId =
-          widget.pregnancyGroupId ?? const Uuid().v4();
+      // Consanguinity check — only for matings with a known father.
+      if (_type == ReproductionEventType.mating && _partnerId != null) {
+        final allAnimals =
+            ref.read(allAnimalsProvider).asData?.value ?? const [];
+        final animalsById = {for (final a in allAnimals) a.id: a};
+        final distance = ConsanguinityService.findRelationshipDistance(
+          animalsById: animalsById,
+          animalAId: widget.mother.id,
+          animalBId: _partnerId!,
+        );
+        if (distance != null) {
+          setState(() => _loading = false);
+          final proceed = await _showConsanguinityWarning(distance);
+          if (!proceed) return;
+          if (!mounted) return;
+          setState(() => _loading = true);
+        }
+      }
+
+      final groupId = widget.pregnancyGroupId ?? const Uuid().v4();
       final saved = await ref.read(reproductionEventRepositoryProvider).add(
             ReproductionEvent(
               id: '',
@@ -103,14 +194,10 @@ class _AddReproductionEventDialogState
 
   @override
   Widget build(BuildContext context) {
-    final animalsAsync = ref.watch(allAnimalsProvider);
-    final maleAnimals = animalsAsync.asData?.value
-            .where((a) =>
-                a.speciesId == widget.mother.speciesId &&
-                a.gender == AnimalGender.male &&
-                a.status == AnimalStatus.active)
-            .toList() ??
-        const [];
+    final showFather = _type == ReproductionEventType.mating ||
+        _type == ReproductionEventType.birth;
+    final showNoExtraFields = _type == ReproductionEventType.matingFailed ||
+        _type == ReproductionEventType.pregnancyLoss;
 
     return AlertDialog(
       title: const Text('Événement de reproduction'),
@@ -120,6 +207,7 @@ class _AddReproductionEventDialogState
           children: [
             DropdownButtonFormField<String>(
               initialValue: _type,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Type',
                 border: OutlineInputBorder(),
@@ -129,8 +217,14 @@ class _AddReproductionEventDialogState
                     value: ReproductionEventType.mating,
                     child: Text('Accouplement')),
                 DropdownMenuItem(
+                    value: ReproductionEventType.matingFailed,
+                    child: Text('❌ Accouplement échoué')),
+                DropdownMenuItem(
                     value: ReproductionEventType.pregnancyConfirmed,
                     child: Text('Confirmer gestation')),
+                DropdownMenuItem(
+                    value: ReproductionEventType.pregnancyLoss,
+                    child: Text('💔 Perte de gestation')),
                 DropdownMenuItem(
                     value: ReproductionEventType.birth,
                     child: Text('Naissance')),
@@ -138,32 +232,67 @@ class _AddReproductionEventDialogState
               onChanged: (v) => setState(() => _type = v ?? _type),
             ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date'),
-              subtitle: Text(_eventDate.toIso8601String().substring(0, 10)),
-              trailing: const Icon(Icons.calendar_today),
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
               onTap: () => _pickDate(
                   _eventDate, (d) => setState(() => _eventDate = d)),
-            ),
-            if (_type == ReproductionEventType.mating &&
-                maleAnimals.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                initialValue: _partnerId,
-                decoration: const InputDecoration(
-                  labelText: 'Mâle (optionnel)',
-                  border: OutlineInputBorder(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.green, width: 1.5),
+                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.green.withValues(alpha: 0.05),
                 ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                      value: null, child: Text('Inconnu')),
-                  ...maleAnimals.map((a) => DropdownMenuItem<String?>(
-                      value: a.id,
-                      child: Text(
-                          '${a.farmId}${a.nickname == null ? "" : " · ${a.nickname}"}'))),
-                ],
-                onChanged: (v) => setState(() => _partnerId = v),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today,
+                        color: AppColors.green, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Date de l\'événement',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.green,
+                                  fontWeight: FontWeight.w600)),
+                          Text(
+                            _eventDate.toIso8601String().substring(0, 10),
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.edit, size: 16, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ),
+            if (showFather && !showNoExtraFields) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.male, size: 18),
+                  label: Text(_partnerFarmId != null
+                      ? 'Père : $_partnerFarmId'
+                      : (_partnerId == null
+                          ? 'Choisir le père'
+                          : 'Père inconnu')),
+                  onPressed: _pickFather,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.green,
+                    side: const BorderSide(color: AppColors.green),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Mâles disponibles au ${_eventDate.toIso8601String().substring(0, 10)}',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ],
             if (_type == ReproductionEventType.pregnancyConfirmed) ...[

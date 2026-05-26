@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/animal.dart';
+import '../models/breed.dart';
 import '../models/crop.dart';
 import '../models/expense.dart';
 import '../models/field.dart';
@@ -10,6 +11,7 @@ import '../models/reproduction_event.dart';
 import '../models/sale.dart';
 import '../models/species.dart';
 import '../models/user_settings.dart';
+import '../models/weight_measurement.dart';
 
 class FirebaseService {
   FirebaseService(this._firestore);
@@ -18,6 +20,23 @@ class FirebaseService {
 
   CollectionReference<Map<String, dynamic>> _coll(String userId, String name) =>
       _firestore.collection('users').doc(userId).collection(name);
+
+  DocumentReference<Map<String, dynamic>> _userDoc(String userId) =>
+      _firestore.collection('users').doc(userId);
+
+  // ─── User profile ─────────────────────────────────────────────────────────
+
+  Future<String?> fetchUserPhone(String userId) async {
+    final snap = await _userDoc(userId).get();
+    final data = snap.data();
+    return data?['phoneNumber'] as String?;
+  }
+
+  Future<void> updateUserPhone(String userId, String? phone) =>
+      _userDoc(userId).set(
+        {'phoneNumber': phone},
+        SetOptions(merge: true),
+      );
 
   // ─── Species ──────────────────────────────────────────────────────────────
 
@@ -29,6 +48,40 @@ class FirebaseService {
     return snap.docs.map((d) => Species.fromFirestore(d.data())).toList();
   }
 
+  Future<void> deleteSpecies(String userId, String id) =>
+      _coll(userId, 'species').doc(id).delete();
+
+  // ─── Breeds ───────────────────────────────────────────────────────────────
+
+  Future<void> uploadBreed(Breed b) =>
+      _coll(b.userId, 'breeds').doc(b.id).set(b.toFirestore(), SetOptions(merge: true));
+
+  Future<List<Breed>> fetchAllBreeds(String userId) async {
+    final snap = await _coll(userId, 'breeds').get();
+    return snap.docs.map((d) => Breed.fromFirestore(d.data())).toList();
+  }
+
+  Future<void> deleteBreed(String userId, String id) =>
+      _coll(userId, 'breeds').doc(id).delete();
+
+  // ─── Weight Measurements ──────────────────────────────────────────────────
+
+  Future<void> uploadWeightMeasurement(WeightMeasurement m) =>
+      _coll(m.userId, 'weightMeasurements')
+          .doc(m.id)
+          .set(m.toFirestore(), SetOptions(merge: true));
+
+  Future<List<WeightMeasurement>> fetchAllWeightMeasurements(
+      String userId) async {
+    final snap = await _coll(userId, 'weightMeasurements').get();
+    return snap.docs
+        .map((d) => WeightMeasurement.fromFirestore(d.data()))
+        .toList();
+  }
+
+  Future<void> deleteWeightMeasurement(String userId, String id) =>
+      _coll(userId, 'weightMeasurements').doc(id).delete();
+
   // ─── Animals ──────────────────────────────────────────────────────────────
 
   Future<void> uploadAnimal(Animal a) =>
@@ -38,6 +91,9 @@ class FirebaseService {
     final snap = await _coll(userId, 'animals').get();
     return snap.docs.map((d) => Animal.fromFirestore(d.data())).toList();
   }
+
+  Future<void> deleteAnimal(String userId, String id) =>
+      _coll(userId, 'animals').doc(id).delete();
 
   // ─── Fields ───────────────────────────────────────────────────────────────
 
@@ -69,6 +125,9 @@ class FirebaseService {
     return snap.docs.map((d) => Expense.fromFirestore(d.data())).toList();
   }
 
+  Future<void> deleteExpense(String userId, String id) =>
+      _coll(userId, 'expenses').doc(id).delete();
+
   // ─── Sales ────────────────────────────────────────────────────────────────
 
   Future<void> uploadSale(Sale s) =>
@@ -78,6 +137,9 @@ class FirebaseService {
     final snap = await _coll(userId, 'sales').get();
     return snap.docs.map((d) => Sale.fromFirestore(d.data())).toList();
   }
+
+  Future<void> deleteSale(String userId, String id) =>
+      _coll(userId, 'sales').doc(id).delete();
 
   // ─── Reproduction events ──────────────────────────────────────────────────
 

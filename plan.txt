@@ -1,0 +1,6 @@
+-female rating:
+ *how many times she produces per year
+ *how many children she brings per pregnancy 
+ *how many kids survive 
+ *the weight of the kids after weaning(not just teh weight but the percentage between the weight when born and the weight just when the kid is weaned)
+ the rating will be a star bazed one and we need to discuss a formula to find he best rating or just put seperate ratings for each categorie

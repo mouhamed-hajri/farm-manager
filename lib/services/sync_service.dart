@@ -1,5 +1,7 @@
 import '../database/app_database.dart';
+import '../models/species.dart';
 import '../repositories/animal_repository.dart';
+import '../repositories/breed_repository.dart';
 import '../repositories/crop_repository.dart';
 import '../repositories/expense_repository.dart';
 import '../repositories/field_repository.dart';
@@ -10,6 +12,7 @@ import '../repositories/reproduction_event_repository.dart';
 import '../repositories/sale_repository.dart';
 import '../repositories/settings_repository.dart';
 import '../repositories/species_repository.dart';
+import '../repositories/weight_measurement_repository.dart';
 import 'firebase_service.dart';
 import 'storage_service.dart';
 
@@ -41,6 +44,7 @@ class SyncService {
   SyncService({
     required this.db,
     required this.animalRepo,
+    required this.breedRepo,
     required this.expenseRepo,
     required this.historyRepo,
     required this.speciesRepo,
@@ -51,12 +55,14 @@ class SyncService {
     required this.healthRepo,
     required this.reminderRepo,
     required this.settingsRepo,
+    required this.weightMeasurementRepo,
     required this.firebaseService,
     required this.storageService,
   });
 
   final AppDatabase db;
   final AnimalRepository animalRepo;
+  final BreedRepository breedRepo;
   final ExpenseRepository expenseRepo;
   final HistoryRepository historyRepo;
   final SpeciesRepository speciesRepo;
@@ -67,6 +73,7 @@ class SyncService {
   final HealthEventRepository healthRepo;
   final ReminderRepository reminderRepo;
   final SettingsRepository settingsRepo;
+  final WeightMeasurementRepository weightMeasurementRepo;
   final FirebaseService firebaseService;
   final StorageService storageService;
 
@@ -78,6 +85,13 @@ class SyncService {
       for (final s in await speciesRepo.getPending(userId)) {
         await firebaseService.uploadSpecies(s);
         await speciesRepo.markSynced(s.id);
+        uploaded++;
+      }
+
+      // Breeds
+      for (final b in await breedRepo.getPending(userId)) {
+        await firebaseService.uploadBreed(b);
+        await breedRepo.markSynced(b.id);
         uploaded++;
       }
 
@@ -153,6 +167,13 @@ class SyncService {
         uploaded++;
       }
 
+      // Weight measurements
+      for (final m in await weightMeasurementRepo.getPending(userId)) {
+        await firebaseService.uploadWeightMeasurement(m);
+        await weightMeasurementRepo.markSynced(m.id);
+        uploaded++;
+      }
+
       // Counters
       final counters = await db.getAllCounters(userId);
       for (final c in counters) {
@@ -170,9 +191,39 @@ class SyncService {
     }
   }
 
+  /// Merges duplicate species (same name) into one. Older app versions could
+  /// seed default categories locally AND then pull the same categories from
+  /// the cloud — producing e.g. two "Moutons". For each duplicate group the
+  /// oldest record is kept; animals and expenses are re-pointed to it and the
+  /// extra copies are removed locally and from the cloud.
+  Future<void> dedupeSpecies(String userId) async {
+    final species = await speciesRepo.getSpecies(userId);
+    final byName = <String, List<Species>>{};
+    for (final s in species) {
+      byName.putIfAbsent(s.nameFr.trim().toLowerCase(), () => []).add(s);
+    }
+    for (final group in byName.values) {
+      if (group.length < 2) continue;
+      group.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final keeper = group.first;
+      for (final loser in group.skip(1)) {
+        await db.reassignAnimalsSpecies(userId, loser.id, keeper.id);
+        await db.reassignExpensesSpecies(userId, loser.id, keeper.id);
+        await db.deleteSpecies(loser.id);
+        try {
+          await firebaseService.deleteSpecies(userId, loser.id);
+        } catch (_) {
+          // Offline or already gone — local cleanup is what matters; the
+          // cloud copy is harmless and will be merged again on next launch.
+        }
+      }
+    }
+  }
+
   Future<RestoreResult> restoreFromCloud(String userId) async {
     try {
       final species = await firebaseService.fetchAllSpecies(userId);
+      final breeds = await firebaseService.fetchAllBreeds(userId);
       final animals = await firebaseService.fetchAllAnimals(userId);
       final fields = await firebaseService.fetchAllFields(userId);
       final crops = await firebaseService.fetchAllCrops(userId);
@@ -185,9 +236,12 @@ class SyncService {
       final history = await firebaseService.fetchAllHistory(userId);
       final counters = await firebaseService.fetchAllCounters(userId);
       final settings = await firebaseService.fetchSettings(userId);
+      final weightMeasurements =
+          await firebaseService.fetchAllWeightMeasurements(userId);
 
       await db.restoreFromCloud(
         species: species,
+        breeds: breeds,
         animals: animals,
         fields: fields,
         crops: crops,
@@ -197,6 +251,7 @@ class SyncService {
         healthEvents: healthEvents,
         reminders: reminders,
         history: history,
+        weightMeasurements: weightMeasurements,
         counterByPrefixYear: counters,
         settings: settings,
       );

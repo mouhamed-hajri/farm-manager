@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/animal.dart';
+import '../models/animal_ledger.dart';
 import 'core_providers.dart';
 
 final allAnimalsProvider = StreamProvider<List<Animal>>((ref) {
@@ -19,6 +20,13 @@ final animalsBySpeciesProvider =
 
 final animalByIdProvider = FutureProvider.family<Animal?, String>((ref, id) {
   return ref.watch(animalRepositoryProvider).getById(id);
+});
+
+final animalLedgerProvider =
+    FutureProvider.autoDispose.family<AnimalLedger?, String>((ref, animalId) {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return Future.value(null);
+  return ref.watch(animalRepositoryProvider).getFinanceLedger(user.uid, animalId);
 });
 
 final allAnimalsStatsProvider = Provider<AnimalsStats>((ref) {

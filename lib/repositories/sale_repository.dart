@@ -5,12 +5,14 @@ import '../models/animal.dart';
 import '../models/history_entry.dart';
 import '../models/sale.dart';
 import 'history_repository.dart';
+import 'reproduction_event_repository.dart';
 
 class SaleRepository {
-  SaleRepository(this._db, this._historyRepo);
+  SaleRepository(this._db, this._historyRepo, this._reproRepo);
 
   final AppDatabase _db;
   final HistoryRepository _historyRepo;
+  final ReproductionEventRepository _reproRepo;
   final _uuid = const Uuid();
 
   Stream<List<Sale>> watchAllSales(String userId) =>
@@ -124,6 +126,12 @@ class SaleRepository {
         updatedAt: Value(updatedAnimal.updatedAt),
         syncStatus: Value(updatedAnimal.syncStatus),
       ));
+
+      // Cancel open reproduction cycles if female
+      if (animal.gender == AnimalGender.female) {
+        await _reproRepo.cancelOpenCycles(
+            animal.userId, animal.id, 'Vente de l\'animal');
+      }
 
       // History
       await _historyRepo.insertHistoryDirect(HistoryEntry(

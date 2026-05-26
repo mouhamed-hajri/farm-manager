@@ -29,6 +29,9 @@ class AnimalsTable extends Table {
   TextColumn get deathCause => text().nullable()();
   TextColumn get deathNotes => text().nullable()();
   TextColumn get notes => text().nullable()();
+  TextColumn get financeOwnerId => text().nullable()();
+  TextColumn get financeMode => text().withDefault(const Constant('self'))();
+  TextColumn get birthEventId => text().nullable()();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();

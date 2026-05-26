@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/animal.dart';
+import '../../models/weight_measurement.dart';
 import '../../providers/core_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
@@ -14,12 +15,14 @@ class AddEditAnimalScreen extends ConsumerStatefulWidget {
     this.animalId,
     this.motherId,
     this.fatherId,
+    this.birthEventId,
   });
 
   final String speciesId;
   final String? animalId;
   final String? motherId;
   final String? fatherId;
+  final String? birthEventId;
 
   @override
   ConsumerState<AddEditAnimalScreen> createState() =>
@@ -29,7 +32,6 @@ class AddEditAnimalScreen extends ConsumerStatefulWidget {
 class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nicknameController = TextEditingController();
-  final _breedController = TextEditingController();
   final _colorController = TextEditingController();
   final _weightController = TextEditingController();
   final _purchasePriceController = TextEditingController();
@@ -37,6 +39,7 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
   final _sellerPhoneController = TextEditingController();
   final _purchaseLocationController = TextEditingController();
   final _notesController = TextEditingController();
+  final _birthWeightController = TextEditingController();
   String _gender = AnimalGender.male;
   String _healthStatus = HealthStatus.healthy;
   DateTime? _birthDate;
@@ -46,6 +49,8 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
   String _farmIdPreview = '...';
   Animal? _existing;
   bool _loading = false;
+  List<String> _breedNames = [];
+  String? _selectedBreed;
 
   @override
   void initState() {
@@ -60,14 +65,27 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
     final species = await ref.read(speciesRepositoryProvider).getById(widget.speciesId);
     if (species == null) return;
 
+    final breeds = await ref.read(breedRepositoryProvider).getBreeds(user.uid, widget.speciesId);
+    final breedNames = breeds.map((b) => b.name).toList();
+
     if (widget.animalId != null) {
       final existing = await ref.read(animalRepositoryProvider).getById(widget.animalId!);
       if (existing != null) {
+        // If existing breed not in list (legacy free text), add it temporarily.
+        final existingBreed = existing.breed;
+        if (existingBreed != null &&
+            existingBreed.isNotEmpty &&
+            !breedNames.contains(existingBreed)) {
+          breedNames.add(existingBreed);
+        }
         setState(() {
           _existing = existing;
           _farmIdPreview = existing.farmId;
           _nicknameController.text = existing.nickname ?? '';
-          _breedController.text = existing.breed ?? '';
+          _selectedBreed = (existingBreed != null && breedNames.contains(existingBreed))
+              ? existingBreed
+              : null;
+          _breedNames = breedNames;
           _colorController.text = existing.color ?? '';
           _weightController.text =
               existing.weight == null ? '' : existing.weight.toString();
@@ -84,17 +102,20 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
           _photoLocalPath = existing.photoLocalPath;
           _photoCloudUrl = existing.photoCloudUrl;
         });
+        return;
       }
-    } else {
-      final preview = await ref.read(farmIdServiceProvider).preview(user.uid, species.idPrefix);
-      if (mounted) setState(() => _farmIdPreview = preview);
     }
+
+    final preview = await ref.read(farmIdServiceProvider).preview(user.uid, species.idPrefix);
+    if (mounted) setState(() {
+      _farmIdPreview = preview;
+      _breedNames = breedNames;
+    });
   }
 
   @override
   void dispose() {
     _nicknameController.dispose();
-    _breedController.dispose();
     _colorController.dispose();
     _weightController.dispose();
     _purchasePriceController.dispose();
@@ -102,6 +123,7 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
     _sellerPhoneController.dispose();
     _purchaseLocationController.dispose();
     _notesController.dispose();
+    _birthWeightController.dispose();
     super.dispose();
   }
 
@@ -132,7 +154,7 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
       final now = DateTime.now().toIso8601String();
 
       if (_existing == null) {
-        await ref.read(animalRepositoryProvider).addAnimal(
+        final savedAnimal = await ref.read(animalRepositoryProvider).addAnimal(
               animal: Animal(
                 id: '',
                 userId: user.uid,
@@ -142,9 +164,7 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                     ? null
                     : _nicknameController.text.trim(),
                 gender: _gender,
-                breed: _breedController.text.trim().isEmpty
-                    ? null
-                    : _breedController.text.trim(),
+                breed: _selectedBreed,
                 color: _colorController.text.trim().isEmpty
                     ? null
                     : _colorController.text.trim(),
@@ -167,6 +187,7 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                 photoCloudUrl: _photoCloudUrl,
                 motherId: widget.motherId,
                 fatherId: widget.fatherId,
+                birthEventId: widget.birthEventId,
                 notes: _notesController.text.trim().isEmpty
                     ? null
                     : _notesController.text.trim(),
@@ -176,6 +197,29 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
               ),
               speciesIdPrefix: species.idPrefix,
             );
+
+        // If a birth weight was entered for a newborn, record it as the first
+        // weight measurement (dated on the birth date).
+        final birthWeightRaw =
+            _birthWeightController.text.trim().replaceAll(',', '.');
+        final birthWeight = double.tryParse(birthWeightRaw);
+        if (birthWeight != null &&
+            birthWeight > 0 &&
+            savedAnimal.birthDate != null) {
+          await ref
+              .read(weightMeasurementRepositoryProvider)
+              .add(WeightMeasurement(
+                id: '',
+                userId: savedAnimal.userId,
+                animalId: savedAnimal.id,
+                weight: birthWeight,
+                measurementDate: savedAnimal.birthDate!,
+                notes: 'Poids à la naissance',
+                createdAt: '',
+                updatedAt: '',
+                syncStatus: 'pending',
+              ));
+        }
       } else {
         await ref.read(animalRepositoryProvider).updateAnimal(
               _existing!.copyWith(
@@ -183,9 +227,7 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                     ? null
                     : _nicknameController.text.trim(),
                 gender: _gender,
-                breed: _breedController.text.trim().isEmpty
-                    ? null
-                    : _breedController.text.trim(),
+                breed: _selectedBreed,
                 color: _colorController.text.trim().isEmpty
                     ? null
                     : _colorController.text.trim(),
@@ -343,6 +385,38 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 12),
+            if (_breedNames.isEmpty)
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Race',
+                  border: OutlineInputBorder(),
+                  helperText: 'Ajoutez des races dans la fiche espèce',
+                ),
+                child: Text(
+                  'Aucune race définie',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              )
+            else
+              DropdownButtonFormField<String?>(
+                value: _selectedBreed,
+                decoration: const InputDecoration(
+                  labelText: 'Race',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('— Aucune —'),
+                  ),
+                  ..._breedNames.map((name) => DropdownMenuItem<String?>(
+                        value: name,
+                        child: Text(name),
+                      )),
+                ],
+                onChanged: (v) => setState(() => _selectedBreed = v),
+              ),
             if (!isSimple) ...[
               const SizedBox(height: 12),
               TextFormField(
@@ -363,14 +437,6 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _breedController,
-                decoration: const InputDecoration(
-                  labelText: 'Race',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
                 controller: _colorController,
                 decoration: const InputDecoration(
                   labelText: 'Couleur',
@@ -385,6 +451,19 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ],
+            if (widget.birthEventId != null && _existing == null) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _birthWeightController,
+                decoration: const InputDecoration(
+                  labelText: 'Poids à la naissance (kg) — optionnel',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.monitor_weight_outlined),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
               ),
             ],
             const SizedBox(height: 12),
