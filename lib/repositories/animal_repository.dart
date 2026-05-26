@@ -291,16 +291,20 @@ class AnimalRepository {
     }
 
     final daughterValuations = <String, double>{};
+    // Female offspring that became independent.
     for (final f in femaleOffspring) {
       if (f.effectiveFinanceMode == AnimalFinanceMode.independentFemaleCenter &&
           f.valuationAmount != null) {
         daughterValuations[f.id] = f.valuationAmount!;
       }
     }
-    // Male breeders with a valuation credited to this ledger.
-    for (final m in maleOffspring) {
-      if (m.isBreeder && m.valuationAmount != null) {
-        daughterValuations[m.id] = m.valuationAmount!;
+    // Male breeders: look up by motherId so the credit persists even after the
+    // ram becomes independent (financeOwnerId changes when sold).
+    for (final child in allChildren.map((r) => r.toModel())) {
+      if (child.gender == AnimalGender.male &&
+          child.isBreeder &&
+          child.valuationAmount != null) {
+        daughterValuations[child.id] = child.valuationAmount!;
       }
     }
 

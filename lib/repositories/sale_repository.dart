@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../models/animal.dart';
+import '../models/expense.dart';
 import '../models/history_entry.dart';
 import '../models/sale.dart';
 import 'history_repository.dart';
@@ -69,6 +70,13 @@ class SaleRepository {
     final now = DateTime.now().toIso8601String();
     final saleId = _uuid.v4();
 
+    // A breeder ram counted under his mother becomes independent when sold:
+    // his valuation stays on him (so mother keeps the credit via motherId lookup),
+    // and we record an internal expense = valuation as his cost basis.
+    final isBreederSale = animal.isBreeder &&
+        animal.isCountedUnderMother &&
+        animal.valuationAmount != null;
+
     return _db.transaction<Sale>(() async {
       final sale = Sale(
         id: saleId,
@@ -90,42 +98,65 @@ class SaleRepository {
       );
       await _db.insertSale(_toCompanion(sale));
 
-      // Flip animal status
-      final updatedAnimal = animal.copyWith(
-        status: AnimalStatus.sold,
-        updatedAt: now,
-        syncStatus: 'pending',
-      );
+      // Flip animal status + handle breeder finance transition.
       await _db.updateAnimal(AnimalsTableCompanion(
-        id: Value(updatedAnimal.id),
-        userId: Value(updatedAnimal.userId),
-        speciesId: Value(updatedAnimal.speciesId),
-        farmId: Value(updatedAnimal.farmId),
-        nickname: Value(updatedAnimal.nickname),
-        gender: Value(updatedAnimal.gender),
-        breed: Value(updatedAnimal.breed),
-        color: Value(updatedAnimal.color),
-        birthDate: Value(updatedAnimal.birthDate),
-        weight: Value(updatedAnimal.weight),
-        healthStatus: Value(updatedAnimal.healthStatus),
-        status: Value(updatedAnimal.status),
-        purchaseDate: Value(updatedAnimal.purchaseDate),
-        purchasePrice: Value(updatedAnimal.purchasePrice),
-        sellerName: Value(updatedAnimal.sellerName),
-        sellerPhone: Value(updatedAnimal.sellerPhone),
-        purchaseLocation: Value(updatedAnimal.purchaseLocation),
-        photoLocalPath: Value(updatedAnimal.photoLocalPath),
-        photoCloudUrl: Value(updatedAnimal.photoCloudUrl),
-        motherId: Value(updatedAnimal.motherId),
-        fatherId: Value(updatedAnimal.fatherId),
-        deathDate: Value(updatedAnimal.deathDate),
-        deathCause: Value(updatedAnimal.deathCause),
-        deathNotes: Value(updatedAnimal.deathNotes),
-        notes: Value(updatedAnimal.notes),
-        createdAt: Value(updatedAnimal.createdAt),
-        updatedAt: Value(updatedAnimal.updatedAt),
-        syncStatus: Value(updatedAnimal.syncStatus),
+        id: Value(animal.id),
+        userId: Value(animal.userId),
+        speciesId: Value(animal.speciesId),
+        farmId: Value(animal.farmId),
+        nickname: Value(animal.nickname),
+        gender: Value(animal.gender),
+        breed: Value(animal.breed),
+        color: Value(animal.color),
+        birthDate: Value(animal.birthDate),
+        weight: Value(animal.weight),
+        healthStatus: Value(animal.healthStatus),
+        status: const Value(AnimalStatus.sold),
+        purchaseDate: Value(animal.purchaseDate),
+        purchasePrice: Value(animal.purchasePrice),
+        sellerName: Value(animal.sellerName),
+        sellerPhone: Value(animal.sellerPhone),
+        purchaseLocation: Value(animal.purchaseLocation),
+        photoLocalPath: Value(animal.photoLocalPath),
+        photoCloudUrl: Value(animal.photoCloudUrl),
+        motherId: Value(animal.motherId),
+        fatherId: Value(animal.fatherId),
+        deathDate: Value(animal.deathDate),
+        deathCause: Value(animal.deathCause),
+        deathNotes: Value(animal.deathNotes),
+        notes: Value(animal.notes),
+        financeOwnerId: isBreederSale
+            ? Value(animal.id) // independent: own ledger
+            : Value(animal.effectiveFinanceOwnerId),
+        financeMode: isBreederSale
+            ? const Value(AnimalFinanceMode.self)
+            : Value(animal.effectiveFinanceMode),
+        isBreeder: Value(animal.isBreeder),
+        weaningDate: Value(animal.weaningDate),
+        valuationAmount: Value(animal.valuationAmount), // keep for mother credit
+        birthEventId: Value(animal.birthEventId),
+        createdAt: Value(animal.createdAt),
+        updatedAt: Value(now),
+        syncStatus: const Value('pending'),
       ));
+
+      // Create internal cost-basis expense on ram's own ledger.
+      if (isBreederSale) {
+        await _db.insertExpense(ExpensesTableCompanion(
+          id: Value(_uuid.v4()),
+          userId: Value(animal.userId),
+          scope: const Value(ExpenseScope.animal),
+          linkedAnimalId: Value(animal.id),
+          linkedSpeciesId: Value(animal.speciesId),
+          amount: Value(animal.valuationAmount!),
+          category: const Value('breeder_valuation'),
+          date: Value(saleDate),
+          description: const Value('Valeur estimée bélier (transfert interne)'),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+          syncStatus: const Value('pending'),
+        ));
+      }
 
       // Cancel open reproduction cycles if female
       if (animal.gender == AnimalGender.female) {
