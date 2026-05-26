@@ -311,6 +311,20 @@ class _InfoTab extends ConsumerWidget {
           const SizedBox(height: 16),
           _NotationSection(animal: animal),
         ],
+        if (animal.gender == AnimalGender.female) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Ajouter un petit'),
+              onPressed: () => context.push(
+                '/animals/species/${animal.speciesId}/new',
+                extra: {'motherId': animal.id},
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         OutlinedButton.icon(
           icon: const Icon(Icons.delete, color: AppColors.red),
