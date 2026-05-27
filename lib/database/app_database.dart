@@ -57,7 +57,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   Future<void> _createIndices() async {
     await customStatement(
@@ -157,6 +157,18 @@ class AppDatabase extends _$AppDatabase {
                 'CREATE INDEX IF NOT EXISTS idx_crop_activities_crop ON crop_activities(crop_id)');
             await customStatement(
                 'CREATE INDEX IF NOT EXISTS idx_harvests_crop ON harvests(crop_id)');
+          }
+          if (from < 11) {
+            await m.addColumn(cropsTable, cropsTable.lifecycle);
+            await m.addColumn(cropsTable, cropsTable.plantedDate);
+            await m.addColumn(cropsTable, cropsTable.treeCount);
+            // Existing trees → perennial, anything else → annual.
+            await customStatement('''
+              UPDATE crops SET lifecycle = CASE
+                WHEN kind = 'tree' THEN 'perennial'
+                ELSE 'annual'
+              END
+            ''');
           }
         },
       );
@@ -1219,6 +1231,9 @@ class AppDatabase extends _$AppDatabase {
         notes: Value(c.notes),
         isDefault: Value(c.isDefault),
         status: Value(c.status),
+        lifecycle: Value(c.lifecycle),
+        plantedDate: Value(c.plantedDate),
+        treeCount: Value(c.treeCount),
         createdAt: Value(c.createdAt),
         updatedAt: Value(c.updatedAt),
         syncStatus: const Value('synced'),
@@ -1438,6 +1453,9 @@ extension CropDataExt on CropsTableData {
         notes: notes,
         isDefault: isDefault,
         status: status,
+        lifecycle: lifecycle,
+        plantedDate: plantedDate,
+        treeCount: treeCount,
         createdAt: createdAt,
         updatedAt: updatedAt,
         syncStatus: syncStatus,

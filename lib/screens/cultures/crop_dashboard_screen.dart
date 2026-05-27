@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,43 +21,18 @@ class CropDashboardScreen extends ConsumerStatefulWidget {
       _CropDashboardScreenState();
 }
 
-enum _Range { thisMonth, thisYear, all }
-
 class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
-  _Range _range = _Range.thisYear;
-  DateTime? _rangeStart;
-  DateTime? _rangeEnd;
+  int? _year;
 
   @override
   void initState() {
     super.initState();
-    _applyRange(_Range.thisYear);
+    _year = DateTime.now().year;
   }
 
-  void _applyRange(_Range r) {
-    final n = DateTime.now();
-    setState(() {
-      _range = r;
-      switch (r) {
-        case _Range.thisMonth:
-          _rangeStart = DateTime(n.year, n.month, 1);
-          _rangeEnd = n;
-        case _Range.thisYear:
-          _rangeStart = DateTime(n.year, 1, 1);
-          _rangeEnd = n;
-        case _Range.all:
-          _rangeStart = null;
-          _rangeEnd = null;
-      }
-    });
-  }
-
-  bool _inRange(String dateStr) {
-    final d = DateTime.tryParse(dateStr);
-    if (d == null) return false;
-    final s = _rangeStart, e = _rangeEnd;
-    if (s == null || e == null) return true;
-    return !d.isBefore(s) && !d.isAfter(e);
+  bool _inYear(String dateStr) {
+    if (_year == null) return true;
+    return DateTime.tryParse(dateStr)?.year == _year;
   }
 
   @override
@@ -68,14 +42,23 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
     final harvestsAsync = ref.watch(cropHarvestsProvider(widget.cropId));
     final fields = ref.watch(fieldsListProvider).asData?.value ?? const [];
 
-    final allActivities =
-        (activitiesAsync.asData?.value ?? const []).cast<CropActivity>();
-    final allHarvests =
-        (harvestsAsync.asData?.value ?? const []).cast<Harvest>();
+    final allActivities = activitiesAsync.asData?.value ?? const [];
+    final allHarvests = harvestsAsync.asData?.value ?? const [];
 
-    final activities = allActivities.where((a) => _inRange(a.date)).toList();
+    final activities = allActivities.where((a) => _inYear(a.date)).toList();
     final harvests =
-        allHarvests.where((h) => _inRange(h.harvestDate)).toList();
+        allHarvests.where((h) => _inYear(h.harvestDate)).toList();
+
+    final years = <int>{
+      DateTime.now().year,
+      ...allActivities
+          .map((a) => DateTime.tryParse(a.date)?.year)
+          .whereType<int>(),
+      ...allHarvests
+          .map((h) => DateTime.tryParse(h.harvestDate)?.year)
+          .whereType<int>(),
+    }.toList()
+      ..sort((a, b) => b.compareTo(a));
 
     final totalExpenses =
         activities.fold<double>(0, (s, a) => s + (a.cost ?? 0));
@@ -84,27 +67,45 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
     final totalRevenue =
         harvests.fold<double>(0, (s, h) => s + (h.totalPrice ?? 0));
     final profit = totalRevenue - totalExpenses;
-    final profitPerKg = totalKg > 0 ? profit / totalKg : null;
 
     return Scaffold(
       appBar: AppBar(
         title: cropAsync.when(
-          data: (c) =>
-              Text(c == null ? 'Culture' : '${c.iconEmoji} ${c.nameFr}'),
+          data: (c) => Text(c == null ? 'Culture' : '${c.iconEmoji} ${c.nameFr}'),
           loading: () => const Text('...'),
           error: (_, __) => const Text('Culture'),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            tooltip: 'Modifier',
-            onPressed: () =>
-                context.push('/cultures/crop/${widget.cropId}/edit'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            tooltip: 'Supprimer',
-            onPressed: () => _confirmDelete(context),
+          if (cropAsync.asData?.value != null)
+            _StatusMenu(crop: cropAsync.asData!.value!),
+          PopupMenuButton<String>(
+            onSelected: (v) async {
+              if (v == 'edit') {
+                context.push('/cultures/crop/${widget.cropId}/edit');
+              } else if (v == 'delete') {
+                _confirmDelete(context);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'edit',
+                child: Row(children: [
+                  Icon(Icons.edit, size: 18),
+                  SizedBox(width: 8),
+                  Text('Modifier'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(children: [
+                  Icon(Icons.delete_outline,
+                      size: 18, color: AppColors.red),
+                  SizedBox(width: 8),
+                  Text('Supprimer',
+                      style: TextStyle(color: AppColors.red)),
+                ]),
+              ),
+            ],
           ),
         ],
       ),
@@ -126,18 +127,18 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
           ]..sort((a, b) => b.date.compareTo(a.date));
 
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              _buildPhotoHeader(crop),
+              _InfoStrip(crop: crop, field: linkedField),
               const SizedBox(height: 12),
-              _buildInfoCard(crop, linkedField),
-              const SizedBox(height: 8),
-              _buildStatusRow(crop),
-              const SizedBox(height: 16),
-              _buildRangeChips(),
-              const SizedBox(height: 12),
-              _buildKpiCard(
-                  totalExpenses, totalKg, totalRevenue, profit, profitPerKg),
+              _yearChips(years),
+              const SizedBox(height: 14),
+              _KpiStrip(
+                kg: totalKg,
+                revenue: totalRevenue,
+                expenses: totalExpenses,
+                profit: profit,
+              ),
               const SizedBox(height: 16),
               Row(children: [
                 Expanded(
@@ -146,7 +147,9 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
                     label: const Text('Activité'),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white),
+                        foregroundColor: Colors.white,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12)),
                     onPressed: () => showDialog(
                       context: context,
                       builder: (_) => AddCropActivityDialog(crop: crop),
@@ -160,7 +163,9 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
                     label: const Text('Récolte'),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.green,
-                        foregroundColor: Colors.white),
+                        foregroundColor: Colors.white,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12)),
                     onPressed: () => showDialog(
                       context: context,
                       builder: (_) => AddHarvestDialog(crop: crop),
@@ -170,31 +175,23 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
               ]),
               const SizedBox(height: 20),
               Row(children: [
-                const Text('Journal',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Journal',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800])),
                 const Spacer(),
                 Text(
                     '${timelineItems.length} entrée${timelineItems.length == 1 ? '' : 's'}',
                     style:
-                        TextStyle(color: Colors.grey[600], fontSize: 13)),
+                        TextStyle(color: Colors.grey[600], fontSize: 12)),
               ]),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               if (timelineItems.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: Text(
-                          'Aucune activité sur cette période',
-                          style: TextStyle(color: Colors.grey[600])),
-                    ),
-                  ),
-                )
+                _emptyJournal(context, crop)
               else
                 ...timelineItems
-                    .map((item) => _buildTimelineTile(context, item)),
-              const SizedBox(height: 24),
+                    .map((it) => _TimelineTile(item: it, ref: ref)),
             ],
           );
         },
@@ -202,239 +199,53 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
     );
   }
 
-  Widget _buildPhotoHeader(Crop crop) {
-    final hasLocal = crop.photoLocalPath != null &&
-        File(crop.photoLocalPath!).existsSync();
-    final hasCloud = crop.photoCloudUrl?.isNotEmpty ?? false;
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: AppColors.green.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: hasLocal
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.file(File(crop.photoLocalPath!),
-                  fit: BoxFit.cover, width: double.infinity))
-          : hasCloud
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.network(crop.photoCloudUrl!,
-                      fit: BoxFit.cover, width: double.infinity))
-              : Center(
-                  child: Text(crop.iconEmoji,
-                      style: const TextStyle(fontSize: 64)),
+  Widget _yearChips(List<int> years) {
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          ...years.map((y) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text('$y'),
+                  selected: _year == y,
+                  onSelected: (_) => setState(() => _year = y),
                 ),
-    );
-  }
-
-  Widget _buildInfoCard(Crop crop, FarmField? linkedField) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Icon(Icons.label_outline, size: 18, color: Colors.grey),
-              const SizedBox(width: 6),
-              Text(_kindLabel(crop.kind),
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-            ]),
-            if (crop.areaOrCountText != null) ...[
-              const SizedBox(height: 6),
-              Row(children: [
-                const Icon(Icons.aspect_ratio, size: 18, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(crop.areaOrCountText!),
-              ]),
-            ],
-            if (linkedField != null) ...[
-              const SizedBox(height: 6),
-              Row(children: [
-                const Icon(Icons.landscape, size: 18, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(linkedField.name),
-              ]),
-            ],
-            if (crop.notes != null) ...[
-              const SizedBox(height: 6),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.notes, size: 18, color: Colors.grey),
-                const SizedBox(width: 6),
-                Expanded(child: Text(crop.notes!)),
-              ]),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusRow(Crop crop) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: CropStatus.all.map((s) {
-          final selected = crop.status == s;
-          final color = s == CropStatus.growing
-              ? AppColors.green
-              : s == CropStatus.lost
-                  ? AppColors.red
-                  : Colors.grey[700]!;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text('${CropStatus.emoji(s)} ${CropStatus.labelFr(s)}'),
-              selected: selected,
-              selectedColor: color.withValues(alpha: 0.2),
-              labelStyle: TextStyle(
-                color: selected ? color : Colors.grey[600],
-                fontWeight:
-                    selected ? FontWeight.bold : FontWeight.normal,
-              ),
-              onSelected: (v) async {
-                if (v && !selected) {
-                  await ref.read(cropRepositoryProvider).markStatus(crop, s);
-                }
-              },
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildRangeChips() => Wrap(
-        spacing: 6,
-        children: [
+              )),
           ChoiceChip(
-              label: const Text('Ce mois'),
-              selected: _range == _Range.thisMonth,
-              onSelected: (_) => _applyRange(_Range.thisMonth)),
-          ChoiceChip(
-              label: const Text('Cette année'),
-              selected: _range == _Range.thisYear,
-              onSelected: (_) => _applyRange(_Range.thisYear)),
-          ChoiceChip(
-              label: const Text('Tout'),
-              selected: _range == _Range.all,
-              onSelected: (_) => _applyRange(_Range.all)),
+            label: const Text('Tout'),
+            selected: _year == null,
+            onSelected: (_) => setState(() => _year = null),
+          ),
         ],
-      );
+      ),
+    );
+  }
 
-  Widget _buildKpiCard(double exp, double kg, double rev, double profit,
-      double? profitPerKg) {
+  Widget _emptyJournal(BuildContext context, Crop crop) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 14),
         child: Column(
           children: [
-            _kpiRow('Dépenses', '${exp.toStringAsFixed(0)} TND',
-                AppColors.red),
+            Icon(Icons.event_note, color: Colors.grey[400], size: 40),
+            const SizedBox(height: 8),
+            Text(
+              _year == null
+                  ? 'Pas encore d\'activité'
+                  : 'Pas d\'activité en $_year',
+              style: TextStyle(color: Colors.grey[700], fontSize: 13),
+            ),
             const SizedBox(height: 4),
-            _kpiRow(
-              'Récolte',
-              kg > 0
-                  ? '${kg.toStringAsFixed(0)} kg  ·  ${rev.toStringAsFixed(0)} TND'
-                  : '${rev.toStringAsFixed(0)} TND',
-              AppColors.green,
+            Text(
+              'Touchez "Activité" ou "Récolte" pour commencer.',
+              style: TextStyle(color: Colors.grey[500], fontSize: 11),
             ),
-            const Divider(),
-            _kpiRow(
-              profit >= 0 ? 'Bénéfice' : 'Perte',
-              '${profit.toStringAsFixed(0)} TND',
-              profit >= 0 ? AppColors.green : AppColors.red,
-              bold: true,
-            ),
-            if (profitPerKg != null) ...[
-              const SizedBox(height: 4),
-              _kpiRow(
-                'Bénéfice / kg',
-                '${profitPerKg.toStringAsFixed(2)} TND/kg',
-                profitPerKg >= 0 ? AppColors.green : AppColors.red,
-              ),
-            ],
           ],
         ),
       ),
     );
-  }
-
-  Widget _kpiRow(String label, String value, Color color,
-          {bool bold = false}) =>
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: TextStyle(
-                  color: color,
-                  fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-                  fontSize: bold ? 16 : 14)),
-          Text(value,
-              style: TextStyle(
-                  color: color,
-                  fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-                  fontSize: bold ? 16 : 14)),
-        ],
-      );
-
-  Widget _buildTimelineTile(BuildContext context, _TimelineItem item) {
-    return Card(
-      child: ListTile(
-        dense: true,
-        leading: Text(item.emoji, style: const TextStyle(fontSize: 22)),
-        title: Text(item.title,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          '${item.date}${item.subtitle != null ? '  ·  ${item.subtitle}' : ''}',
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: item.amount != null
-            ? Text(
-                '${item.amount!.toStringAsFixed(0)} TND',
-                style: TextStyle(
-                    color: item.isHarvest ? AppColors.green : AppColors.red,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13),
-              )
-            : null,
-        onLongPress: () => _showDeleteDialog(context, item),
-      ),
-    );
-  }
-
-  Future<void> _showDeleteDialog(
-      BuildContext context, _TimelineItem item) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-            'Supprimer cette ${item.isHarvest ? 'récolte' : 'activité'} ?'),
-        content: const Text('Cette action est irréversible.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler')),
-          ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.red,
-                  foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Supprimer')),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      if (item.isHarvest && item.harvest != null) {
-        await ref.read(harvestRepositoryProvider).delete(item.harvest!);
-      } else if (item.activity != null) {
-        await ref
-            .read(cropActivityRepositoryProvider)
-            .delete(item.activity!);
-      }
-    }
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
@@ -462,18 +273,183 @@ class _CropDashboardScreenState extends ConsumerState<CropDashboardScreen> {
       if (context.mounted) context.pop();
     }
   }
+}
 
-  String _kindLabel(String kind) {
-    switch (kind) {
-      case 'tree':
-        return 'Arbre fruitier';
-      case 'vegetable':
-        return 'Légume';
-      case 'crop':
-        return 'Grande culture';
-      default:
-        return 'Autre';
+/// Status pill in the AppBar, doubles as a popup menu to change state.
+class _StatusMenu extends ConsumerWidget {
+  const _StatusMenu({required this.crop});
+  final Crop crop;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color = crop.status == CropStatus.growing
+        ? Colors.white
+        : crop.status == CropStatus.lost
+            ? AppColors.red
+            : Colors.grey[300]!;
+    return PopupMenuButton<String>(
+      tooltip: 'Statut',
+      offset: const Offset(0, 40),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${CropStatus.emoji(crop.status)} ${CropStatus.labelFr(crop.status)}',
+              style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
+          ],
+        ),
+      ),
+      onSelected: (s) async {
+        await ref.read(cropRepositoryProvider).markStatus(crop, s);
+      },
+      itemBuilder: (_) => CropStatus.all
+          .map((s) => PopupMenuItem(
+                value: s,
+                child: Text(
+                    '${CropStatus.emoji(s)} ${CropStatus.labelFr(s)}'),
+              ))
+          .toList(),
+    );
+  }
+}
+
+/// One-liner info row: emoji + name (in AppBar already) + field + tree count
+/// + planted date. Replaces the old info card.
+class _InfoStrip extends StatelessWidget {
+  const _InfoStrip({required this.crop, required this.field});
+  final Crop crop;
+  final FarmField? field;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[];
+    if (field != null) parts.add('📍 ${field!.name}');
+    if (crop.treeCount != null) parts.add('🌳 ${crop.treeCount} arbres');
+    if (crop.plantedDate != null) {
+      parts.add('📅 Planté ${_year(crop.plantedDate!)}');
     }
+    parts.add(CropLifecycle.labelFr(crop.lifecycle));
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: parts.map((p) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.grey.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(p,
+              style:
+                  TextStyle(fontSize: 12, color: Colors.grey[800])),
+        );
+      }).toList(),
+    );
+  }
+
+  String _year(String iso) {
+    final d = DateTime.tryParse(iso);
+    return d?.year.toString() ?? iso;
+  }
+}
+
+/// 3-column KPI strip — replaces the bigger card. Big numbers, tight footprint.
+class _KpiStrip extends StatelessWidget {
+  const _KpiStrip({
+    required this.kg,
+    required this.revenue,
+    required this.expenses,
+    required this.profit,
+  });
+  final double kg;
+  final double revenue;
+  final double expenses;
+  final double profit;
+
+  @override
+  Widget build(BuildContext context) {
+    final profitColor = profit >= 0 ? AppColors.green : AppColors.red;
+    return Row(
+      children: [
+        Expanded(
+          child: _kpi(
+            'Récolte',
+            kg > 0 ? '${kg.toStringAsFixed(0)} kg' : '—',
+            AppColors.green,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _kpi(
+            'Dépenses',
+            '−${expenses.toStringAsFixed(0)}',
+            AppColors.red,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _kpi(
+            profit >= 0 ? 'Bénéfice' : 'Perte',
+            '${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(0)}',
+            profitColor,
+            highlight: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _kpi(String label, String value, Color color,
+      {bool highlight = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: highlight
+            ? color.withValues(alpha: 0.10)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: highlight
+                ? color.withValues(alpha: 0.3)
+                : Colors.grey.shade300,
+            width: highlight ? 1.4 : 1),
+      ),
+      child: Column(
+        children: [
+          Text(label,
+              style: TextStyle(
+                  color: Colors.grey[700],
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: highlight ? 18 : 16),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (label != 'Récolte') const SizedBox(height: 2),
+          if (label != 'Récolte')
+            Text('TND',
+                style: TextStyle(color: Colors.grey[500], fontSize: 9)),
+        ],
+      ),
+    );
   }
 }
 
@@ -498,30 +474,97 @@ class _TimelineItem {
     this.harvest,
   });
 
-  factory _TimelineItem.fromActivity(CropActivity a) {
-    final title = a.description?.isNotEmpty == true
-        ? a.description!
-        : CropActivityType.labelFr(a.activityType);
-    return _TimelineItem(
-      date: a.date,
-      emoji: CropActivityType.emoji(a.activityType),
-      title: title,
-      subtitle: a.notes,
-      amount: a.cost,
-      isHarvest: false,
-      activity: a,
+  factory _TimelineItem.fromActivity(CropActivity a) => _TimelineItem(
+        date: a.date,
+        emoji: CropActivityType.emoji(a.activityType),
+        title: a.description?.isNotEmpty == true
+            ? a.description!
+            : CropActivityType.labelFr(a.activityType),
+        subtitle: a.notes,
+        amount: a.cost,
+        isHarvest: false,
+        activity: a,
+      );
+
+  factory _TimelineItem.fromHarvest(Harvest h) => _TimelineItem(
+        date: h.harvestDate,
+        emoji: '🚜',
+        title:
+            'Récolte ${h.quantity.toStringAsFixed(0)} ${HarvestUnit.labelFr(h.unit)}',
+        subtitle: h.notes,
+        amount: h.totalPrice,
+        isHarvest: true,
+        harvest: h,
+      );
+}
+
+class _TimelineTile extends StatelessWidget {
+  const _TimelineTile({required this.item, required this.ref});
+  final _TimelineItem item;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final amtColor = item.isHarvest ? AppColors.green : AppColors.red;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      child: ListTile(
+        dense: true,
+        leading: Text(item.emoji, style: const TextStyle(fontSize: 22)),
+        title: Text(item.title,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13)),
+        subtitle: Text(
+          item.subtitle == null || item.subtitle!.isEmpty
+              ? item.date
+              : '${item.date}  ·  ${item.subtitle}',
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+        ),
+        trailing: item.amount != null && item.amount! > 0
+            ? Text(
+                '${item.isHarvest ? '+' : '−'}${item.amount!.toStringAsFixed(0)} TND',
+                style: TextStyle(
+                    color: amtColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13),
+              )
+            : null,
+        onLongPress: () => _confirmRemove(context),
+      ),
     );
   }
 
-  factory _TimelineItem.fromHarvest(Harvest h) {
-    return _TimelineItem(
-      date: h.harvestDate,
-      emoji: '🚜',
-      title: 'Récolte: ${h.quantity.toStringAsFixed(0)} ${HarvestUnit.labelFr(h.unit)}',
-      subtitle: h.notes,
-      amount: h.totalPrice,
-      isHarvest: true,
-      harvest: h,
+  Future<void> _confirmRemove(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+            'Supprimer cette ${item.isHarvest ? 'récolte' : 'activité'} ?'),
+        content: const Text(
+            'La dépense ou la vente liée sera également supprimée.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.red,
+                  foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Supprimer')),
+        ],
+      ),
     );
+    if (ok == true) {
+      if (item.isHarvest && item.harvest != null) {
+        await ref.read(harvestRepositoryProvider).delete(item.harvest!);
+      } else if (item.activity != null) {
+        await ref
+            .read(cropActivityRepositoryProvider)
+            .delete(item.activity!);
+      }
+    }
   }
 }
+

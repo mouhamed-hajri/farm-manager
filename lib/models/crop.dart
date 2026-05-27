@@ -15,6 +15,9 @@ class Crop {
   final String? notes;
   final bool isDefault;
   final String status;
+  final String lifecycle;
+  final String? plantedDate;
+  final int? treeCount;
   final String createdAt;
   final String updatedAt;
   final String syncStatus;
@@ -34,6 +37,9 @@ class Crop {
     this.notes,
     required this.isDefault,
     this.status = CropStatus.growing,
+    this.lifecycle = CropLifecycle.perennial,
+    this.plantedDate,
+    this.treeCount,
     required this.createdAt,
     required this.updatedAt,
     required this.syncStatus,
@@ -56,6 +62,9 @@ class Crop {
     String? notes,
     bool? isDefault,
     String? status,
+    String? lifecycle,
+    String? plantedDate,
+    int? treeCount,
     String? createdAt,
     String? updatedAt,
     String? syncStatus,
@@ -75,6 +84,9 @@ class Crop {
         notes: notes ?? this.notes,
         isDefault: isDefault ?? this.isDefault,
         status: status ?? this.status,
+        lifecycle: lifecycle ?? this.lifecycle,
+        plantedDate: plantedDate ?? this.plantedDate,
+        treeCount: treeCount ?? this.treeCount,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         syncStatus: syncStatus ?? this.syncStatus,
@@ -96,6 +108,9 @@ class Crop {
         'notes': notes,
         'isDefault': isDefault,
         'status': status,
+        'lifecycle': lifecycle,
+        'plantedDate': plantedDate,
+        'treeCount': treeCount,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -115,6 +130,9 @@ class Crop {
         notes: m['notes'] as String?,
         isDefault: m['isDefault'] as bool? ?? false,
         status: m['status'] as String? ?? CropStatus.growing,
+        lifecycle: m['lifecycle'] as String? ?? CropLifecycle.perennial,
+        plantedDate: m['plantedDate'] as String?,
+        treeCount: (m['treeCount'] as num?)?.toInt(),
         createdAt: m['createdAt'] as String,
         updatedAt: m['updatedAt'] as String,
         syncStatus: 'synced',
@@ -133,6 +151,16 @@ abstract class CropKind {
   static const crop = 'crop';
   static const vegetable = 'vegetable';
   static const other = 'other';
+}
+
+abstract class CropLifecycle {
+  static const perennial = 'perennial'; // trees, multi-year
+  static const annual = 'annual';       // wheat, tomatoes, one cycle
+
+  static const all = [perennial, annual];
+
+  static String labelFr(String l) =>
+      l == annual ? 'Annuelle' : 'Pérenne (arbres)';
 }
 
 abstract class CropStatus {

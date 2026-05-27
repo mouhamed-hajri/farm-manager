@@ -4,6 +4,8 @@ import '../models/crop_activity.dart';
 import '../models/harvest.dart';
 import 'core_providers.dart';
 
+// Typed providers below — imports of CropActivity/Harvest used in generics.
+
 final cropsListProvider = StreamProvider<List<Crop>>((ref) {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const Stream.empty();
@@ -22,7 +24,7 @@ final cropByIdProvider = Provider.family<AsyncValue<Crop?>, String>((ref, id) {
 });
 
 final cropActivitiesProvider = StreamProvider.family
-    .autoDispose<List<dynamic>, String>((ref, cropId) {
+    .autoDispose<List<CropActivity>, String>((ref, cropId) {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const Stream.empty();
   return ref
@@ -31,7 +33,7 @@ final cropActivitiesProvider = StreamProvider.family
 });
 
 final cropHarvestsProvider = StreamProvider.family
-    .autoDispose<List<dynamic>, String>((ref, cropId) {
+    .autoDispose<List<Harvest>, String>((ref, cropId) {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const Stream.empty();
   return ref

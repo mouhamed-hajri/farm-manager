@@ -19,6 +19,10 @@ class CropsTable extends Table {
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
   TextColumn get status =>
       text().withDefault(const Constant('growing'))();
+  TextColumn get lifecycle =>
+      text().withDefault(const Constant('perennial'))();
+  TextColumn get plantedDate => text().nullable()();
+  IntColumn get treeCount => integer().nullable()();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();

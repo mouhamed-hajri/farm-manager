@@ -130,7 +130,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/cultures/crop/new',
-        builder: (_, __) => const AddEditCropScreen(),
+        builder: (_, state) {
+          final extra = state.extra as Map<String, String?>?;
+          return AddEditCropScreen(preselectedFieldId: extra?['fieldId']);
+        },
       ),
       GoRoute(
         path: '/cultures/crop/:id/edit',
