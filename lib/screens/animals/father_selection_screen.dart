@@ -12,6 +12,9 @@ class FatherSelectionScreen extends ConsumerStatefulWidget {
     required this.userId,
     required this.speciesId,
     required this.eventDate,
+    this.motherFatherId,
+    this.motherMotherId,
+    this.motherBirthEventId,
   });
 
   final String userId;
@@ -20,6 +23,11 @@ class FatherSelectionScreen extends ConsumerStatefulWidget {
   /// The date of the breeding event. Males who were dead, sold, or not yet
   /// born at this date are filtered out.
   final DateTime eventDate;
+
+  /// IDs of the female's known parents — used to flag consanguinity in the list.
+  final String? motherFatherId;
+  final String? motherMotherId;
+  final String? motherBirthEventId;
 
   @override
   ConsumerState<FatherSelectionScreen> createState() =>
@@ -52,6 +60,12 @@ class _FatherSelectionScreenState extends ConsumerState<FatherSelectionScreen> {
           s.linkedAnimalId!: s.saleDate,
     };
 
+    // IDs that are known direct relatives of the mother.
+    final directRelativeIds = <String>{
+      if (widget.motherFatherId != null) widget.motherFatherId!,
+      if (widget.motherMotherId != null) widget.motherMotherId!,
+    };
+
     final out = <_AvailableMale>[];
     for (final m in males) {
       // Not born yet at event date → exclude.
@@ -59,32 +73,40 @@ class _FatherSelectionScreenState extends ConsumerState<FatherSelectionScreen> {
         continue;
       }
 
+      final isRelative = directRelativeIds.contains(m.id);
+
       if (m.status == AnimalStatus.dead) {
         final d = m.deathDate;
         if (d == null) {
-          // Death date missing → show conservatively.
-          out.add(_AvailableMale(animal: m, offDate: null, offType: 'dead'));
+          out.add(_AvailableMale(
+              animal: m, offDate: null, offType: 'dead',
+              isDirectRelative: isRelative));
         } else if (d.compareTo(_eventDateStr) > 0) {
-          out.add(_AvailableMale(animal: m, offDate: d, offType: 'dead'));
+          out.add(_AvailableMale(
+              animal: m, offDate: d, offType: 'dead',
+              isDirectRelative: isRelative));
         }
-        // Died on or before event date → exclude.
         continue;
       }
 
       if (m.status == AnimalStatus.sold) {
         final d = saleDateByAnimal[m.id];
         if (d == null) {
-          // Sale date missing → show conservatively.
-          out.add(_AvailableMale(animal: m, offDate: null, offType: 'sold'));
+          out.add(_AvailableMale(
+              animal: m, offDate: null, offType: 'sold',
+              isDirectRelative: isRelative));
         } else if (d.compareTo(_eventDateStr) > 0) {
-          out.add(_AvailableMale(animal: m, offDate: d, offType: 'sold'));
+          out.add(_AvailableMale(
+              animal: m, offDate: d, offType: 'sold',
+              isDirectRelative: isRelative));
         }
-        // Sold on or before event date → exclude.
         continue;
       }
 
       // Active
-      out.add(_AvailableMale(animal: m, offDate: null, offType: 'active'));
+      out.add(_AvailableMale(
+          animal: m, offDate: null, offType: 'active',
+          isDirectRelative: isRelative));
     }
 
     return out;
@@ -217,6 +239,7 @@ class _AvailableMale {
     required this.animal,
     required this.offDate,
     required this.offType,
+    this.isDirectRelative = false,
   });
   final Animal animal;
 
@@ -225,6 +248,9 @@ class _AvailableMale {
 
   /// 'active', 'dead', or 'sold'.
   final String offType;
+
+  /// True when this male is a known direct parent of the mother being bred.
+  final bool isDirectRelative;
 }
 
 class _MaleCard extends StatelessWidget {
@@ -235,6 +261,7 @@ class _MaleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isInactive = male.offType != 'active';
+    final isRelative = male.isDirectRelative;
 
     return InkWell(
       onTap: onTap,
@@ -243,9 +270,14 @@ class _MaleCard extends StatelessWidget {
         opacity: isInactive ? 0.7 : 1.0,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isRelative
+                ? Colors.red.withValues(alpha: 0.04)
+                : Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(
+              color: isRelative ? Colors.red.withValues(alpha: 0.5) : Colors.grey.shade200,
+              width: isRelative ? 1.5 : 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -280,6 +312,23 @@ class _MaleCard extends StatelessWidget {
                           fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (isRelative)
+                      Container(
+                        margin: const EdgeInsets.only(top: 2, bottom: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                              color: Colors.red.withValues(alpha: 0.4)),
+                        ),
+                        child: const Text('⚠️ Parent direct',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold)),
+                      ),
                     if (male.animal.isBreeder)
                       Container(
                         margin: const EdgeInsets.only(top: 2, bottom: 2),

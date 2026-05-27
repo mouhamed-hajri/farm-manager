@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/animal.dart';
 import '../../../providers/core_providers.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/date_field.dart';
 
 class MarkAnimalDeadDialog extends ConsumerStatefulWidget {
   const MarkAnimalDeadDialog({super.key, required this.animal});
@@ -20,15 +21,6 @@ class _MarkAnimalDeadDialogState extends ConsumerState<MarkAnimalDeadDialog> {
   DateTime _date = DateTime.now();
   bool _loading = false;
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-    );
-    if (d != null) setState(() => _date = d);
-  }
 
   Future<void> _save() async {
     setState(() => _loading = true);
@@ -58,13 +50,16 @@ class _MarkAnimalDeadDialogState extends ConsumerState<MarkAnimalDeadDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date du décès'),
-              subtitle: Text(_date.toIso8601String().substring(0, 10)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: _pickDate,
+            DateField(
+              label: 'Date du décès',
+              initialDate: _date,
+              lastDate: DateTime.now(),
+              required: true,
+              onChanged: (d) {
+                if (d != null) setState(() => _date = d);
+              },
             ),
+            const SizedBox(height: 12),
             TextFormField(
               controller: _causeController,
               decoration: const InputDecoration(

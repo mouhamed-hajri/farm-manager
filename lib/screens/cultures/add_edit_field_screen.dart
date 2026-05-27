@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/field.dart';
 import '../../providers/core_providers.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/date_field.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditFieldScreen extends ConsumerStatefulWidget {
@@ -138,20 +139,6 @@ class _AddEditFieldScreenState extends ConsumerState<AddEditFieldScreen> {
     }
   }
 
-  Future<void> _pickDate(DateTime? current, void Function(DateTime) onPicked) async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (d != null) onPicked(d);
-  }
-
-  String _formatDate(DateTime? d) => d == null
-      ? 'Choisir'
-      : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
   @override
   Widget build(BuildContext context) {
     final isRented = _ownership == FieldOwnership.rented;
@@ -250,21 +237,17 @@ class _AddEditFieldScreenState extends ConsumerState<AddEditFieldScreen> {
                 ),
               ]),
               const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Début du contrat'),
-                subtitle: Text(_formatDate(_rentStart)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () =>
-                    _pickDate(_rentStart, (d) => setState(() => _rentStart = d)),
+              DateField(
+                label: 'Début du contrat',
+                initialDate: _rentStart,
+                onChanged: (d) => setState(() => _rentStart = d),
               ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Fin du contrat'),
-                subtitle: Text(_formatDate(_rentEnd)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () =>
-                    _pickDate(_rentEnd, (d) => setState(() => _rentEnd = d)),
+              const SizedBox(height: 12),
+              DateField(
+                label: 'Fin du contrat',
+                initialDate: _rentEnd,
+                lastDate: DateTime.now().add(const Duration(days: 365 * 30)),
+                onChanged: (d) => setState(() => _rentEnd = d),
               ),
               const SizedBox(height: 12),
               TextFormField(

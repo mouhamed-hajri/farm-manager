@@ -44,8 +44,12 @@ class StorageService {
     required String localPath,
     required String publicId,
   }) async {
+    // Guard: source file must exist before we attempt anything.
+    if (!File(localPath).existsSync()) return null;
+
+    File? compressed;
     try {
-      final compressed = await _compress(localPath);
+      compressed = await _compress(localPath);
 
       final request = http.MultipartRequest(
         'POST',
@@ -64,9 +68,29 @@ class StorageService {
         final json = jsonDecode(body) as Map<String, dynamic>;
         return json['secure_url'] as String?;
       }
+      // Non-200 from Cloudinary — log status for debugging.
+      assert(() {
+        // ignore: avoid_print
+        print('[StorageService] upload failed: HTTP ${streamed.statusCode} – $body');
+        return true;
+      }());
       return null;
-    } catch (_) {
+    } catch (e) {
+      assert(() {
+        // ignore: avoid_print
+        print('[StorageService] upload error: $e');
+        return true;
+      }());
       return null;
+    } finally {
+      // Always delete the temp compressed file to avoid storage leaks.
+      try {
+        if (compressed != null &&
+            compressed.path != localPath &&
+            compressed.existsSync()) {
+          await compressed.delete();
+        }
+      } catch (_) {}
     }
   }
 

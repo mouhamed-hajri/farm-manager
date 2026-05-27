@@ -149,22 +149,25 @@ class _ExpenseBanner extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Left image strip
-            SizedBox(
-              width: 88,
-              child: _FinanceImage(
-                animal: animal,
-                species: species,
-                crop: crop,
-                scope: expense.scope,
-                accentColor: AppColors.red,
+            // Left image strip — constrained so it never drives infinite height
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 80, maxHeight: 120),
+              child: SizedBox(
+                width: 88,
+                child: _FinanceImage(
+                  animal: animal,
+                  species: species,
+                  crop: crop,
+                  scope: expense.scope,
+                  accentColor: AppColors.red,
+                ),
               ),
             ),
             // Right content
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 12),
+                    horizontal: 14, vertical: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -199,13 +202,16 @@ class _ExpenseBanner extends StatelessWidget {
                           const Icon(Icons.pets,
                               size: 12, color: AppColors.green),
                           const SizedBox(width: 4),
-                          Text(
-                            animal.displayName,
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                                color: AppColors.green,
-                                fontWeight: FontWeight.w600),
+                          Expanded(
+                            child: Text(
+                              animal.displayName,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontFamily: 'monospace',
+                                  color: AppColors.green,
+                                  fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
@@ -325,21 +331,24 @@ class _SaleBanner extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Left image strip
-            SizedBox(
-              width: 88,
-              child: _FinanceImage(
-                animal: animal,
-                species: species,
-                crop: crop,
-                scope: sale.scope,
-                accentColor: AppColors.green,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 80, maxHeight: 120),
+              child: SizedBox(
+                width: 88,
+                child: _FinanceImage(
+                  animal: animal,
+                  species: species,
+                  crop: crop,
+                  scope: sale.scope,
+                  accentColor: AppColors.green,
+                ),
               ),
             ),
             // Right content
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 12),
+                    horizontal: 14, vertical: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -458,8 +467,6 @@ class _FinanceImage extends StatelessWidget {
         return Image.file(
           File(animal!.photoLocalPath!),
           fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
           errorBuilder: (_, __, ___) => _emoji(_animalEmoji()),
         );
       }
@@ -467,8 +474,6 @@ class _FinanceImage extends StatelessWidget {
         return Image.network(
           animal!.photoCloudUrl!,
           fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
           errorBuilder: (_, __, ___) => _emoji(_animalEmoji()),
           loadingBuilder: (_, child, progress) =>
               progress == null ? child : _emoji(_animalEmoji()),
@@ -510,19 +515,15 @@ class _FinanceImage extends StatelessWidget {
 
   String _animalEmoji() => species?.iconEmoji ?? '🐾';
 
-  Widget _emoji(String emoji, {Color? bg}) => Container(
+  Widget _emoji(String emoji, {Color? bg}) => ColoredBox(
         color: bg ?? accentColor.withValues(alpha: 0.10),
-        width: double.infinity,
-        height: double.infinity,
         child: Center(
           child: Text(emoji, style: const TextStyle(fontSize: 40)),
         ),
       );
 
-  Widget _icon(IconData icon, Color color) => Container(
+  Widget _icon(IconData icon, Color color) => ColoredBox(
         color: color.withValues(alpha: 0.10),
-        width: double.infinity,
-        height: double.infinity,
         child: Center(
           child: Icon(icon, size: 36, color: color),
         ),

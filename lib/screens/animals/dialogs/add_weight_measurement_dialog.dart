@@ -4,6 +4,7 @@ import '../../../models/animal.dart';
 import '../../../models/weight_measurement.dart';
 import '../../../providers/core_providers.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/date_field.dart';
 
 class AddWeightMeasurementDialog extends ConsumerStatefulWidget {
   const AddWeightMeasurementDialog({super.key, required this.animal});
@@ -30,15 +31,6 @@ class _AddWeightMeasurementDialogState
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) setState(() => _date = picked);
-  }
 
   Future<void> _save() async {
     final raw = _weightCtrl.text.trim().replaceAll(',', '.');
@@ -104,31 +96,14 @@ class _AddWeightMeasurementDialogState
               ),
             ),
             const SizedBox(height: 10),
-            InkWell(
-              onTap: _pickDate,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today,
-                        size: 18, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _date.toIso8601String().substring(0, 10),
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                    ),
-                    const Icon(Icons.edit, size: 14, color: Colors.grey),
-                  ],
-                ),
-              ),
+            DateField(
+              label: 'Date',
+              initialDate: _date,
+              lastDate: DateTime.now(),
+              required: true,
+              onChanged: (d) {
+                if (d != null) setState(() => _date = d);
+              },
             ),
             const SizedBox(height: 10),
             TextField(

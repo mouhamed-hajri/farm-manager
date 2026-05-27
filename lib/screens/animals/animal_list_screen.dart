@@ -40,6 +40,12 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
         title: Text(species?.nameFr ?? 'Animaux'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.account_tree_outlined),
+            tooltip: 'Arbre généalogique',
+            onPressed: () =>
+                context.push('/animals/tree/${widget.speciesId}'),
+          ),
+          IconButton(
             icon: const Icon(Icons.emoji_events_outlined),
             tooltip: 'Classement femelles',
             onPressed: () => context.push('/animals/ranking'),
@@ -115,31 +121,60 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
                     final dead = filtered
                         .where((a) => a.status == AnimalStatus.dead)
                         .toList();
-                    return filtered.isEmpty
-                        ? _empty()
-                        : ListView(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 12),
-                            children: [
-                              if (active.isNotEmpty) ...[
-                                const _SectionLabel('Actifs'),
-                                _grid(active, species),
-                              ],
-                              if (sold.isNotEmpty)
-                                ExpansionTile(
-                                  title:
-                                      Text('Animaux vendus (${sold.length})'),
-                                  children: [_grid(sold, species)],
+
+                    if (filtered.isEmpty) return _empty();
+
+                    const delegate = SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 0.72,
+                    );
+
+                    return RefreshIndicator(
+                      onRefresh: () async =>
+                          ref.invalidate(animalsBySpeciesProvider(widget.speciesId)),
+                      child: CustomScrollView(
+                        slivers: [
+                          if (active.isNotEmpty) ...[
+                            const SliverToBoxAdapter(
+                                child: _SectionLabel('Actifs')),
+                            SliverPadding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              sliver: SliverGrid(
+                                delegate: SliverChildBuilderDelegate(
+                                  (ctx, i) => AnimalGridCard(
+                                      animal: active[i], species: species),
+                                  childCount: active.length,
                                 ),
-                              if (dead.isNotEmpty)
-                                ExpansionTile(
-                                  title:
-                                      Text('Animaux morts (${dead.length})'),
-                                  children: [_grid(dead, species)],
-                                ),
-                              const SizedBox(height: 80),
-                            ],
-                          );
+                                gridDelegate: delegate,
+                              ),
+                            ),
+                          ],
+                          if (sold.isNotEmpty) ...[
+                            SliverToBoxAdapter(
+                              child: _CollapsibleSection(
+                                label: 'Animaux vendus (${sold.length})',
+                                animals: sold,
+                                species: species,
+                                delegate: delegate,
+                              ),
+                            ),
+                          ],
+                          if (dead.isNotEmpty) ...[
+                            SliverToBoxAdapter(
+                              child: _CollapsibleSection(
+                                label: 'Animaux morts (${dead.length})',
+                                animals: dead,
+                                species: species,
+                                delegate: delegate,
+                              ),
+                            ),
+                          ],
+                          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                        ],
+                      ),
+                    );
                   },
                 ),
               ),
@@ -157,20 +192,6 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
     );
   }
 
-  Widget _grid(List<Animal> animals, dynamic species) => GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 0.80,
-        ),
-        itemCount: animals.length,
-        itemBuilder: (ctx, i) =>
-            AnimalGridCard(animal: animals[i], species: species),
-      );
-
   Widget _empty() => Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -186,6 +207,66 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
           ],
         ),
       );
+}
+
+// Sold/dead sections stay collapsed by default — only expand on demand.
+// Using a plain StatefulWidget avoids rebuilding the entire SliverList.
+class _CollapsibleSection extends StatefulWidget {
+  const _CollapsibleSection({
+    required this.label,
+    required this.animals,
+    required this.species,
+    required this.delegate,
+  });
+
+  final String label;
+  final List<Animal> animals;
+  final dynamic species;
+  final SliverGridDelegateWithFixedCrossAxisCount delegate;
+
+  @override
+  State<_CollapsibleSection> createState() => _CollapsibleSectionState();
+}
+
+class _CollapsibleSectionState extends State<_CollapsibleSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(widget.label,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                ),
+                Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: widget.delegate,
+              itemCount: widget.animals.length,
+              itemBuilder: (ctx, i) => AnimalGridCard(
+                  animal: widget.animals[i], species: widget.species),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _SectionLabel extends StatelessWidget {

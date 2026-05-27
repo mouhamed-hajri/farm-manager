@@ -2,11 +2,14 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../models/crop.dart';
+import '../models/history_entry.dart';
+import 'history_repository.dart';
 
 class CropRepository {
-  CropRepository(this._db);
+  CropRepository(this._db, [this._historyRepo]);
 
   final AppDatabase _db;
+  final HistoryRepository? _historyRepo;
   final _uuid = const Uuid();
 
   Stream<List<Crop>> watchCrops(String userId) =>
@@ -43,7 +46,39 @@ class CropRepository {
     return toSave;
   }
 
-  Future<void> deleteCrop(String id) => _db.deleteCrop(id);
+  Future<void> deleteCrop(String id) async {
+    // Cascade: remove all activities + harvests for this crop first.
+    await _db.deleteCropActivitiesForCrop(id);
+    await _db.deleteHarvestsForCrop(id);
+    await _db.deleteCrop(id);
+  }
+
+  /// Updates the crop's lifecycle status (growing / harvested / lost).
+  /// Records a history entry so the change is traceable.
+  Future<Crop> markStatus(Crop crop, String status) async {
+    final now = DateTime.now().toIso8601String();
+    final updated = crop.copyWith(
+      status: status,
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    await _db.updateCrop(_toCompanion(updated));
+    if (_historyRepo != null) {
+      await _historyRepo.insertHistoryDirect(HistoryEntry(
+        id: _uuid.v4(),
+        userId: crop.userId,
+        actionType: 'crop_status_changed',
+        title:
+            '${CropStatus.emoji(status)} ${crop.nameFr} — ${CropStatus.labelFr(status)}',
+        relatedType: 'crop',
+        relatedId: crop.id,
+        date: now.substring(0, 10),
+        createdAt: now,
+        syncStatus: 'pending',
+      ));
+    }
+    return updated;
+  }
 
   Future<void> seedDefaultsIfEmpty(String userId) async {
     final existing = await getCrops(userId);
@@ -129,6 +164,7 @@ class CropRepository {
         photoCloudUrl: Value(c.photoCloudUrl),
         notes: Value(c.notes),
         isDefault: Value(c.isDefault),
+        status: Value(c.status),
         createdAt: Value(c.createdAt),
         updatedAt: Value(c.updatedAt),
         syncStatus: Value(c.syncStatus),

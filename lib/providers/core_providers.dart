@@ -10,8 +10,10 @@ import '../models/reproduction_event.dart';
 import '../models/weight_measurement.dart';
 import '../repositories/animal_repository.dart';
 import '../repositories/breed_repository.dart';
+import '../repositories/crop_activity_repository.dart';
 import '../repositories/crop_repository.dart';
 import '../repositories/expense_repository.dart';
+import '../repositories/harvest_repository.dart';
 import '../repositories/field_repository.dart';
 import '../repositories/health_event_repository.dart';
 import '../repositories/history_repository.dart';
@@ -87,7 +89,10 @@ final weightMeasurementRepositoryProvider =
 });
 
 final historyRepositoryProvider = Provider<HistoryRepository>((ref) {
-  return HistoryRepository(ref.watch(appDatabaseProvider));
+  return HistoryRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(firebaseServiceProvider),
+  );
 });
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
@@ -110,7 +115,27 @@ final fieldRepositoryProvider = Provider<FieldRepository>((ref) {
 });
 
 final cropRepositoryProvider = Provider<CropRepository>((ref) {
-  return CropRepository(ref.watch(appDatabaseProvider));
+  return CropRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(historyRepositoryProvider),
+  );
+});
+
+final cropActivityRepositoryProvider =
+    Provider<CropActivityRepository>((ref) {
+  return CropActivityRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(expenseRepositoryProvider),
+    ref.watch(historyRepositoryProvider),
+  );
+});
+
+final harvestRepositoryProvider = Provider<HarvestRepository>((ref) {
+  return HarvestRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(saleRepositoryProvider),
+    ref.watch(historyRepositoryProvider),
+  );
 });
 
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {

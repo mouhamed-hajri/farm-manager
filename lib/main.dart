@@ -10,8 +10,10 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'app.dart';
 import 'database/app_database.dart';
 import 'repositories/animal_repository.dart';
+import 'repositories/crop_activity_repository.dart';
 import 'repositories/crop_repository.dart';
 import 'repositories/expense_repository.dart';
+import 'repositories/harvest_repository.dart';
 import 'repositories/field_repository.dart';
 import 'repositories/health_event_repository.dart';
 import 'repositories/history_repository.dart';
@@ -50,16 +52,19 @@ void callbackDispatcher() {
       final db = AppDatabase();
       try {
         final speciesRepo = SpeciesRepository(db);
-        final historyRepo = HistoryRepository(db);
+        final firebaseSvc = FirebaseService(FirebaseFirestore.instance);
+        final historyRepo = HistoryRepository(db, firebaseSvc);
         final expenseRepo = ExpenseRepository(db);
         final farmIdSvc = FarmIdService(db);
-        final firebaseSvc = FirebaseService(FirebaseFirestore.instance);
         final reproRepo = ReproductionEventRepository(db);
         final animalRepo =
             AnimalRepository(db, expenseRepo, historyRepo, farmIdSvc, firebaseSvc, reproRepo);
         final fieldRepo = FieldRepository(db);
-        final cropRepo = CropRepository(db);
+        final cropRepo = CropRepository(db, historyRepo);
         final saleRepo = SaleRepository(db, historyRepo, reproRepo);
+        final cropActivityRepo =
+            CropActivityRepository(db, expenseRepo, historyRepo);
+        final harvestRepo = HarvestRepository(db, saleRepo, historyRepo);
         final healthRepo = HealthEventRepository(db);
         final reminderRepo = ReminderRepository(db);
         final breedRepo = BreedRepository(db);
@@ -75,6 +80,8 @@ void callbackDispatcher() {
           speciesRepo: speciesRepo,
           fieldRepo: fieldRepo,
           cropRepo: cropRepo,
+          cropActivityRepo: cropActivityRepo,
+          harvestRepo: harvestRepo,
           saleRepo: saleRepo,
           reproductionRepo: reproRepo,
           healthRepo: healthRepo,

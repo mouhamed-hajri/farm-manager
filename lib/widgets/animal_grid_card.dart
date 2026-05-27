@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -213,10 +214,15 @@ class AnimalGridCard extends ConsumerWidget {
       return Image.file(File(animal.photoLocalPath!), fit: BoxFit.cover);
     }
     if (animal.photoCloudUrl?.isNotEmpty ?? false) {
-      return Image.network(
-        animal.photoCloudUrl!,
+      return CachedNetworkImage(
+        imageUrl: animal.photoCloudUrl!,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _emojiPlaceholder(),
+        placeholder: (_, __) => const Center(
+            child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2))),
+        errorWidget: (_, __, ___) => _emojiPlaceholder(),
       );
     }
     return _emojiPlaceholder();

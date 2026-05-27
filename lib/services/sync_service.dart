@@ -2,8 +2,10 @@ import '../database/app_database.dart';
 import '../models/species.dart';
 import '../repositories/animal_repository.dart';
 import '../repositories/breed_repository.dart';
+import '../repositories/crop_activity_repository.dart';
 import '../repositories/crop_repository.dart';
 import '../repositories/expense_repository.dart';
+import '../repositories/harvest_repository.dart';
 import '../repositories/field_repository.dart';
 import '../repositories/health_event_repository.dart';
 import '../repositories/history_repository.dart';
@@ -22,6 +24,8 @@ class SyncResult {
   final String? error;
 
   const SyncResult({required this.success, this.uploaded = 0, this.error});
+
+  bool get isPartialSuccess => success && error != null;
 }
 
 class RestoreResult {
@@ -50,6 +54,8 @@ class SyncService {
     required this.speciesRepo,
     required this.fieldRepo,
     required this.cropRepo,
+    required this.cropActivityRepo,
+    required this.harvestRepo,
     required this.saleRepo,
     required this.reproductionRepo,
     required this.healthRepo,
@@ -68,6 +74,8 @@ class SyncService {
   final SpeciesRepository speciesRepo;
   final FieldRepository fieldRepo;
   final CropRepository cropRepo;
+  final CropActivityRepository cropActivityRepo;
+  final HarvestRepository harvestRepo;
   final SaleRepository saleRepo;
   final ReproductionEventRepository reproductionRepo;
   final HealthEventRepository healthRepo;
@@ -78,116 +86,170 @@ class SyncService {
   final StorageService storageService;
 
   Future<SyncResult> syncPending(String userId) async {
-    try {
-      var uploaded = 0;
+    var uploaded = 0;
+    final errors = <String>[];
 
+    // Helper: upload one entity; if it fails, log and continue — don't abort
+    // the entire sync. The entity stays 'pending' and will retry next sync.
+    Future<void> tryUpload(Future<void> Function() fn, String label) async {
+      try {
+        await fn();
+        uploaded++;
+      } catch (e) {
+        errors.add('$label: $e');
+      }
+    }
+
+    try {
       // Species
       for (final s in await speciesRepo.getPending(userId)) {
-        await firebaseService.uploadSpecies(s);
-        await speciesRepo.markSynced(s.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadSpecies(s);
+          await speciesRepo.markSynced(s.id);
+        }, 'species/${s.id}');
       }
 
       // Breeds
       for (final b in await breedRepo.getPending(userId)) {
-        await firebaseService.uploadBreed(b);
-        await breedRepo.markSynced(b.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadBreed(b);
+          await breedRepo.markSynced(b.id);
+        }, 'breed/${b.id}');
       }
 
       // Animals (with photo upload)
       for (final animal in await animalRepo.getPendingAnimals(userId)) {
-        var toUpload = animal;
-        if (animal.photoLocalPath != null && animal.photoCloudUrl == null) {
-          final url = await storageService.uploadAnimalPhoto(
-            userId: userId,
-            animalId: animal.id,
-            localPath: animal.photoLocalPath!,
-          );
-          if (url != null) toUpload = animal.copyWith(photoCloudUrl: url);
-        }
-        await firebaseService.uploadAnimal(toUpload);
-        await animalRepo.markSynced(animal.id);
-        uploaded++;
+        await tryUpload(() async {
+          var toUpload = animal;
+          if (animal.photoLocalPath != null && animal.photoCloudUrl == null) {
+            final url = await storageService.uploadAnimalPhoto(
+              userId: userId,
+              animalId: animal.id,
+              localPath: animal.photoLocalPath!,
+            );
+            if (url != null) toUpload = animal.copyWith(photoCloudUrl: url);
+          }
+          await firebaseService.uploadAnimal(toUpload);
+          await animalRepo.markSynced(animal.id);
+        }, 'animal/${animal.id}');
       }
 
       // Fields
       for (final f in await fieldRepo.getPending(userId)) {
-        await firebaseService.uploadField(f);
-        await fieldRepo.markSynced(f.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadField(f);
+          await fieldRepo.markSynced(f.id);
+        }, 'field/${f.id}');
       }
 
       // Crops
       for (final c in await cropRepo.getPending(userId)) {
-        await firebaseService.uploadCrop(c);
-        await cropRepo.markSynced(c.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadCrop(c);
+          await cropRepo.markSynced(c.id);
+        }, 'crop/${c.id}');
+      }
+
+      // Crop Activities
+      for (final a in await cropActivityRepo.getPending(userId)) {
+        await tryUpload(() async {
+          await firebaseService.uploadCropActivity(a);
+          await cropActivityRepo.markSynced(a.id);
+        }, 'crop_activity/${a.id}');
+      }
+
+      // Harvests
+      for (final h in await harvestRepo.getPending(userId)) {
+        await tryUpload(() async {
+          await firebaseService.uploadHarvest(h);
+          await harvestRepo.markSynced(h.id);
+        }, 'harvest/${h.id}');
       }
 
       // Expenses
       for (final e in await expenseRepo.getPendingExpenses(userId)) {
-        await firebaseService.uploadExpense(e);
-        await expenseRepo.markSynced(e.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadExpense(e);
+          await expenseRepo.markSynced(e.id);
+        }, 'expense/${e.id}');
       }
 
       // Sales
       for (final s in await saleRepo.getPending(userId)) {
-        await firebaseService.uploadSale(s);
-        await saleRepo.markSynced(s.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadSale(s);
+          await saleRepo.markSynced(s.id);
+        }, 'sale/${s.id}');
       }
 
       // Reproduction
       for (final r in await reproductionRepo.getPending(userId)) {
-        await firebaseService.uploadReproductionEvent(r);
-        await reproductionRepo.markSynced(r.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadReproductionEvent(r);
+          await reproductionRepo.markSynced(r.id);
+        }, 'repro/${r.id}');
       }
 
       // Health
       for (final h in await healthRepo.getPending(userId)) {
-        await firebaseService.uploadHealthEvent(h);
-        await healthRepo.markSynced(h.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadHealthEvent(h);
+          await healthRepo.markSynced(h.id);
+        }, 'health/${h.id}');
       }
 
       // Reminders
       for (final r in await reminderRepo.getPending(userId)) {
-        await firebaseService.uploadReminder(r);
-        await reminderRepo.markSynced(r.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadReminder(r);
+          await reminderRepo.markSynced(r.id);
+        }, 'reminder/${r.id}');
       }
 
       // History
       for (final h in await historyRepo.getPendingHistory(userId)) {
-        await firebaseService.uploadHistory(h);
-        await historyRepo.markSynced(h.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadHistory(h);
+          await historyRepo.markSynced(h.id);
+        }, 'history/${h.id}');
       }
 
       // Weight measurements
       for (final m in await weightMeasurementRepo.getPending(userId)) {
-        await firebaseService.uploadWeightMeasurement(m);
-        await weightMeasurementRepo.markSynced(m.id);
-        uploaded++;
+        await tryUpload(() async {
+          await firebaseService.uploadWeightMeasurement(m);
+          await weightMeasurementRepo.markSynced(m.id);
+        }, 'weight/${m.id}');
       }
 
-      // Counters
-      final counters = await db.getAllCounters(userId);
-      for (final c in counters) {
-        await firebaseService.uploadCounter(
-            c.userId, c.prefix, c.year, c.lastNumber);
+      // Counters (best-effort — not per-entity critical)
+      try {
+        final counters = await db.getAllCounters(userId);
+        for (final c in counters) {
+          await firebaseService.uploadCounter(
+              c.userId, c.prefix, c.year, c.lastNumber);
+        }
+      } catch (e) {
+        errors.add('counters: $e');
       }
 
       if (uploaded > 0) {
-        await firebaseService.updateLastBackupDate(userId);
+        try {
+          await firebaseService.updateLastBackupDate(userId);
+        } catch (_) {}
       }
 
+      if (errors.isNotEmpty) {
+        // Partial success: some entities failed but the rest are synced.
+        return SyncResult(
+          success: uploaded > 0 || errors.length < 3,
+          uploaded: uploaded,
+          error: '${errors.length} erreur(s) : ${errors.first}',
+        );
+      }
       return SyncResult(success: true, uploaded: uploaded);
     } catch (e) {
-      return SyncResult(success: false, error: e.toString());
+      return SyncResult(success: false, uploaded: uploaded, error: e.toString());
     }
   }
 
@@ -238,6 +300,8 @@ class SyncService {
       final settings = await firebaseService.fetchSettings(userId);
       final weightMeasurements =
           await firebaseService.fetchAllWeightMeasurements(userId);
+      final cropActivities = await firebaseService.fetchAllCropActivities(userId);
+      final harvests = await firebaseService.fetchAllHarvests(userId);
 
       await db.restoreFromCloud(
         species: species,
@@ -252,6 +316,8 @@ class SyncService {
         reminders: reminders,
         history: history,
         weightMeasurements: weightMeasurements,
+        cropActivities: cropActivities,
+        harvests: harvests,
         counterByPrefixYear: counters,
         settings: settings,
       );

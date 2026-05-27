@@ -18,8 +18,8 @@ final animalsBySpeciesProvider =
       .watchAnimalsBySpecies(user.uid, speciesId);
 });
 
-final animalByIdProvider = FutureProvider.family<Animal?, String>((ref, id) {
-  return ref.watch(animalRepositoryProvider).getById(id);
+final animalByIdProvider = StreamProvider.family<Animal?, String>((ref, id) {
+  return ref.watch(animalRepositoryProvider).watchById(id);
 });
 
 final animalLedgerProvider =

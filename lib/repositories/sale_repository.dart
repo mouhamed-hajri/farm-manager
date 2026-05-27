@@ -5,6 +5,7 @@ import '../models/animal.dart';
 import '../models/expense.dart';
 import '../models/history_entry.dart';
 import '../models/sale.dart';
+import '../utils/history_labels.dart';
 import 'history_repository.dart';
 import 'reproduction_event_repository.dart';
 
@@ -44,9 +45,9 @@ class SaleRepository {
     final history = HistoryEntry(
       id: _uuid.v4(),
       userId: toSave.userId,
-      actionType: _historyActionForScope(toSave.scope),
-      title: _historyTitleForSale(toSave),
-      description: '${toSave.totalPrice.toStringAsFixed(0)} TND${toSave.buyerName == null ? '' : ' - ${toSave.buyerName}'}',
+      actionType: HistoryLabels.actionForScope(toSave.scope),
+      title: HistoryLabels.saleTitleForScope(toSave.scope, toSave.productName),
+      description: HistoryLabels.saleDesc(toSave.totalPrice, toSave.buyerName),
       relatedType: 'sale',
       relatedId: toSave.id,
       date: toSave.saleDate,
@@ -168,9 +169,9 @@ class SaleRepository {
       await _historyRepo.insertHistoryDirect(HistoryEntry(
         id: _uuid.v4(),
         userId: animal.userId,
-        actionType: 'animal_sold',
-        title: 'Animal vendu : ${animal.farmId}',
-        description: '${salePrice.toStringAsFixed(0)} TND${buyerName == null ? '' : ' - $buyerName'}',
+        actionType: HistoryAction.animalSold,
+        title: HistoryLabels.animalSoldTitle(animal.farmId),
+        description: HistoryLabels.animalSoldDesc(salePrice, buyerName),
         relatedType: 'animal',
         relatedId: animal.id,
         date: saleDate,
@@ -197,32 +198,6 @@ class SaleRepository {
   }
 
   Future<void> markSynced(String id) => _db.markSaleSynced(id);
-
-  String _historyActionForScope(String scope) {
-    switch (scope) {
-      case SaleScope.crop:
-        return 'crop_sold';
-      case SaleScope.product:
-        return 'product_sold';
-      case SaleScope.animal:
-        return 'animal_sold';
-      default:
-        return 'sale_added';
-    }
-  }
-
-  String _historyTitleForSale(Sale s) {
-    switch (s.scope) {
-      case SaleScope.crop:
-        return 'Vente culture';
-      case SaleScope.product:
-        return 'Vente produit : ${s.productName ?? ""}';
-      case SaleScope.animal:
-        return 'Vente animal';
-      default:
-        return 'Vente';
-    }
-  }
 
   SalesTableCompanion _toCompanion(Sale s) => SalesTableCompanion(
         id: Value(s.id),

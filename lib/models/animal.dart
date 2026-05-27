@@ -229,7 +229,8 @@ class Animal {
     final motherId = map['motherId'] as String?;
     final id = map['id'] as String;
     final computedMode = _defaultFinanceMode(gender, motherId);
-    final computedOwner = (gender == 'male' && motherId != null) ? motherId : id;
+    // Both male and female offspring start counted under their mother.
+    final computedOwner = motherId != null ? motherId : id;
     return Animal(
       id: id,
       userId: map['userId'] as String,

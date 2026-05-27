@@ -4,6 +4,7 @@ import '../../../models/animal.dart';
 import '../../../models/health_event.dart';
 import '../../../providers/core_providers.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/date_field.dart';
 
 class AddHealthEventDialog extends ConsumerStatefulWidget {
   const AddHealthEventDialog({super.key, required this.animal});
@@ -33,18 +34,6 @@ class _AddHealthEventDialogState extends ConsumerState<AddHealthEventDialog> {
     super.dispose();
   }
 
-  Future<void> _pickDate(DateTime? cur, void Function(DateTime) on,
-      {bool allowFuture = false}) async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: cur ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: allowFuture
-          ? DateTime.now().add(const Duration(days: 365 * 5))
-          : DateTime.now(),
-    );
-    if (d != null) on(d);
-  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -123,14 +112,16 @@ class _AddHealthEventDialogState extends ConsumerState<AddHealthEventDialog> {
                     v == null || v.trim().isEmpty ? 'Requis' : null,
               ),
               const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Date'),
-                subtitle: Text(_date.toIso8601String().substring(0, 10)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () =>
-                    _pickDate(_date, (d) => setState(() => _date = d)),
+              DateField(
+                label: 'Date',
+                initialDate: _date,
+                lastDate: DateTime.now(),
+                required: true,
+                onChanged: (d) {
+                  if (d != null) setState(() => _date = d);
+                },
               ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _vetController,
                 decoration: const InputDecoration(
@@ -140,18 +131,14 @@ class _AddHealthEventDialogState extends ConsumerState<AddHealthEventDialog> {
               ),
               if (_type == HealthEventType.vaccination) ...[
                 const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Prochaine vaccination (rappel)'),
-                  subtitle: Text(_nextDue == null
-                      ? 'Aucune'
-                      : _nextDue!.toIso8601String().substring(0, 10)),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () => _pickDate(
-                      _nextDue, (d) => setState(() => _nextDue = d),
-                      allowFuture: true),
+                DateField(
+                  label: 'Prochaine vaccination (rappel)',
+                  initialDate: _nextDue,
+                  lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                  onChanged: (d) => setState(() => _nextDue = d),
                 ),
               ],
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _notesController,
                 decoration: const InputDecoration(

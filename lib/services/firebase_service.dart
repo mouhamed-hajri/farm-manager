@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/animal.dart';
 import '../models/breed.dart';
 import '../models/crop.dart';
+import '../models/crop_activity.dart';
 import '../models/expense.dart';
+import '../models/harvest.dart';
 import '../models/field.dart';
 import '../models/health_event.dart';
 import '../models/history_entry.dart';
@@ -115,6 +117,37 @@ class FirebaseService {
     return snap.docs.map((d) => Crop.fromFirestore(d.data())).toList();
   }
 
+  Future<void> deleteCrop(String userId, String id) =>
+      _coll(userId, 'crops').doc(id).delete();
+
+  // ─── Crop Activities ─────────────────────────────────────────────────────
+
+  Future<void> uploadCropActivity(CropActivity a) => _coll(a.userId, 'cropActivities')
+      .doc(a.id)
+      .set(a.toFirestore(), SetOptions(merge: true));
+
+  Future<List<CropActivity>> fetchAllCropActivities(String userId) async {
+    final snap = await _coll(userId, 'cropActivities').get();
+    return snap.docs.map((d) => CropActivity.fromFirestore(d.data())).toList();
+  }
+
+  Future<void> deleteCropActivity(String userId, String id) =>
+      _coll(userId, 'cropActivities').doc(id).delete();
+
+  // ─── Harvests ────────────────────────────────────────────────────────────
+
+  Future<void> uploadHarvest(Harvest h) => _coll(h.userId, 'harvests')
+      .doc(h.id)
+      .set(h.toFirestore(), SetOptions(merge: true));
+
+  Future<List<Harvest>> fetchAllHarvests(String userId) async {
+    final snap = await _coll(userId, 'harvests').get();
+    return snap.docs.map((d) => Harvest.fromFirestore(d.data())).toList();
+  }
+
+  Future<void> deleteHarvest(String userId, String id) =>
+      _coll(userId, 'harvests').doc(id).delete();
+
   // ─── Expenses ─────────────────────────────────────────────────────────────
 
   Future<void> uploadExpense(Expense e) =>
@@ -179,6 +212,9 @@ class FirebaseService {
 
   Future<void> uploadHistory(HistoryEntry entry) =>
       _coll(entry.userId, 'history').doc(entry.id).set(entry.toFirestore(), SetOptions(merge: true));
+
+  Future<void> deleteHistory(String userId, String id) =>
+      _coll(userId, 'history').doc(id).delete();
 
   Future<List<HistoryEntry>> fetchAllHistory(String userId) async {
     final snap = await _coll(userId, 'history').get();

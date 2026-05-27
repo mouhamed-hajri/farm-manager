@@ -8,6 +8,7 @@ import '../../providers/core_providers.dart';
 import '../../providers/crop_provider.dart';
 import '../../providers/species_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/date_field.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditSaleScreen extends ConsumerStatefulWidget {
@@ -159,16 +160,6 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
     });
   }
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-    );
-    if (d != null) setState(() => _date = d);
-  }
-
   double get _total {
     // Single source of truth: whatever the user last edited or what got computed
     final t = double.tryParse(_totalPriceController.text) ?? 0;
@@ -191,7 +182,7 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
         if (animal == null) return;
         await ref.read(saleRepositoryProvider).sellAnimal(
               animal: animal,
-              salePrice: double.parse(_unitPriceController.text),
+              salePrice: double.parse(_unitPriceController.text.replaceAll(',', '.')),
               saleDate: _date.toIso8601String().substring(0, 10),
               buyerName: _buyerNameController.text.trim().isEmpty
                   ? null
@@ -205,7 +196,7 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
                   : _notesController.text.trim(),
             );
       } else {
-        final qty = double.parse(_qtyController.text);
+        final qty = double.parse(_qtyController.text.replaceAll(',', '.'));
         final total = double.tryParse(_totalPriceController.text) ?? 0;
         final unitFromField = double.tryParse(_unitPriceController.text) ?? 0;
         // Total is canonical when present; unit price is derived (qty > 0 guaranteed by validator)
@@ -351,12 +342,11 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
                 onChanged: (_) => _onTotalChanged(),
                 validator: (v) {
                   // Either total OR unit must be filled
-                  final t = double.tryParse(v ?? '');
-                  final u = double.tryParse(_unitPriceController.text);
+                  final t = double.tryParse((v ?? '').replaceAll(',', '.'));
+                  final u = double.tryParse(_unitPriceController.text.replaceAll(',', '.'));
                   if ((t == null || t <= 0) && (u == null || u <= 0)) {
                     return 'Prix requis';
                   }
-                  if (t != null && t < 0) return 'Prix invalide';
                   return null;
                 },
               ),
@@ -390,19 +380,22 @@ class _AddEditSaleScreenState extends ConsumerState<AddEditSaleScreen> {
                     const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}),
                 validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Prix invalide';
+                  final n = double.tryParse((v ?? '').replaceAll(',', '.'));
+                  if (n == null || n <= 0) return 'Prix invalide';
                   return null;
                 },
               ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date de vente'),
-              subtitle: Text(_date.toIso8601String().substring(0, 10)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: _pickDate,
+            DateField(
+              label: 'Date de vente',
+              initialDate: _date,
+              lastDate: DateTime.now(),
+              required: true,
+              onChanged: (d) {
+                if (d != null) setState(() => _date = d);
+              },
             ),
+            const SizedBox(height: 12),
             TextFormField(
               controller: _buyerNameController,
               decoration: const InputDecoration(

@@ -12,6 +12,8 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     speciesRepo: ref.watch(speciesRepositoryProvider),
     fieldRepo: ref.watch(fieldRepositoryProvider),
     cropRepo: ref.watch(cropRepositoryProvider),
+    cropActivityRepo: ref.watch(cropActivityRepositoryProvider),
+    harvestRepo: ref.watch(harvestRepositoryProvider),
     saleRepo: ref.watch(saleRepositoryProvider),
     reproductionRepo: ref.watch(reproductionEventRepositoryProvider),
     healthRepo: ref.watch(healthEventRepositoryProvider),
@@ -70,16 +72,21 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
     final result = await _ref.read(syncServiceProvider).syncPending(user.uid);
 
+    // Re-query the real pending count — new writes may have arrived during sync.
+    final remaining =
+        await _ref.read(appDatabaseProvider).countPendingSync(user.uid);
+
     if (result.success) {
       state = state.copyWith(
         status: SyncStatus.success,
         lastUploadedCount: result.uploaded,
-        pendingCount: 0,
+        pendingCount: remaining,
         errorMessage: null,
       );
     } else {
       state = state.copyWith(
         status: SyncStatus.error,
+        pendingCount: remaining,
         errorMessage: result.error,
       );
     }

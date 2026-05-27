@@ -14,6 +14,7 @@ class Crop {
   final String? photoCloudUrl;
   final String? notes;
   final bool isDefault;
+  final String status;
   final String createdAt;
   final String updatedAt;
   final String syncStatus;
@@ -32,6 +33,7 @@ class Crop {
     this.photoCloudUrl,
     this.notes,
     required this.isDefault,
+    this.status = CropStatus.growing,
     required this.createdAt,
     required this.updatedAt,
     required this.syncStatus,
@@ -53,6 +55,7 @@ class Crop {
     String? photoCloudUrl,
     String? notes,
     bool? isDefault,
+    String? status,
     String? createdAt,
     String? updatedAt,
     String? syncStatus,
@@ -71,6 +74,7 @@ class Crop {
         photoCloudUrl: photoCloudUrl ?? this.photoCloudUrl,
         notes: notes ?? this.notes,
         isDefault: isDefault ?? this.isDefault,
+        status: status ?? this.status,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         syncStatus: syncStatus ?? this.syncStatus,
@@ -91,6 +95,7 @@ class Crop {
         'photoCloudUrl': photoCloudUrl,
         'notes': notes,
         'isDefault': isDefault,
+        'status': status,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -109,6 +114,7 @@ class Crop {
         photoCloudUrl: m['photoCloudUrl'] as String?,
         notes: m['notes'] as String?,
         isDefault: m['isDefault'] as bool? ?? false,
+        status: m['status'] as String? ?? CropStatus.growing,
         createdAt: m['createdAt'] as String,
         updatedAt: m['updatedAt'] as String,
         syncStatus: 'synced',
@@ -127,4 +133,34 @@ abstract class CropKind {
   static const crop = 'crop';
   static const vegetable = 'vegetable';
   static const other = 'other';
+}
+
+abstract class CropStatus {
+  static const growing = 'growing';
+  static const harvested = 'harvested';
+  static const lost = 'lost';
+
+  static const all = [growing, harvested, lost];
+
+  static String emoji(String s) {
+    switch (s) {
+      case harvested:
+        return '✅';
+      case lost:
+        return '❌';
+      default:
+        return '🌱';
+    }
+  }
+
+  static String labelFr(String s) {
+    switch (s) {
+      case harvested:
+        return 'Récoltée';
+      case lost:
+        return 'Perdue';
+      default:
+        return 'En culture';
+    }
+  }
 }

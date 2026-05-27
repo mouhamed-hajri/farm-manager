@@ -6,6 +6,7 @@ import 'providers/language_provider.dart';
 import 'screens/animals/add_edit_animal_screen.dart';
 import 'screens/animals/animal_list_screen.dart';
 import 'screens/animals/animal_profile_screen.dart';
+import 'screens/animals/family_tree_screen.dart';
 import 'screens/animals/female_ranking_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
@@ -13,11 +14,13 @@ import 'screens/auth/verify_email_screen.dart';
 import 'screens/backup/backup_restore_screen.dart';
 import 'screens/cultures/add_edit_crop_screen.dart';
 import 'screens/cultures/add_edit_field_screen.dart';
+import 'screens/cultures/crop_dashboard_screen.dart';
 import 'screens/cultures/cultures_screen.dart';
 import 'screens/cultures/field_dashboard_screen.dart';
 import 'screens/finances/add_edit_expense_screen.dart';
 import 'screens/finances/add_edit_sale_screen.dart';
 import 'screens/finances/finances_screen.dart';
+import 'screens/history/history_screen.dart';
 import 'screens/home/home_dashboard_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/species/add_edit_species_screen.dart';
@@ -106,6 +109,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const FemaleRankingScreen(),
       ),
       GoRoute(
+        path: '/animals/tree/:speciesId',
+        builder: (_, state) => FamilyTreeScreen(
+          speciesId: state.pathParameters['speciesId']!,
+        ),
+      ),
+      GoRoute(
         path: '/cultures/field/new',
         builder: (_, __) => const AddEditFieldScreen(),
       ),
@@ -124,9 +133,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const AddEditCropScreen(),
       ),
       GoRoute(
-        path: '/cultures/crop/:id',
+        path: '/cultures/crop/:id/edit',
         builder: (_, state) =>
             AddEditCropScreen(cropId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/cultures/crop/:id',
+        builder: (_, state) =>
+            CropDashboardScreen(cropId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/finances/expense/new',
@@ -156,6 +170,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/backup',
         builder: (_, __) => const BackupRestoreScreen(),
+      ),
+      GoRoute(
+        path: '/history',
+        builder: (_, __) => const HistoryScreen(),
       ),
 
       StatefulShellRoute.indexedStack(

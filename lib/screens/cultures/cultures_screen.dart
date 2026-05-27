@@ -60,13 +60,19 @@ class _FieldsTab extends ConsumerWidget {
       body: fieldsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur : $e')),
-        data: (list) => list.isEmpty
-            ? _empty('Aucun champ', 'Appuyez sur "+" pour ajouter un champ.')
-            : ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: list.length,
-                itemBuilder: (ctx, i) => _FieldCard(field: list[i]),
-              ),
+        data: (list) => RefreshIndicator(
+          onRefresh: () async => ref.invalidate(fieldsListProvider),
+          child: list.isEmpty
+              ? ListView(
+                  children: [_empty('Aucun champ',
+                      'Appuyez sur "+" pour ajouter un champ.')],
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: list.length,
+                  itemBuilder: (ctx, i) => _FieldCard(field: list[i]),
+                ),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/cultures/field/new'),
@@ -174,34 +180,66 @@ class _FieldCard extends StatelessWidget {
   }
 }
 
-class _CropsTab extends ConsumerWidget {
+class _CropsTab extends ConsumerStatefulWidget {
   const _CropsTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CropsTab> createState() => _CropsTabState();
+}
+
+class _CropsTabState extends ConsumerState<_CropsTab> {
+  String? _statusFilter; // null = all
+
+  @override
+  Widget build(BuildContext context) {
     final cropsAsync = ref.watch(cropsListProvider);
     return Scaffold(
       body: cropsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur : $e')),
-        data: (list) => list.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.grass, size: 80, color: Colors.grey[400]),
-                    const SizedBox(height: 12),
-                    Text('Aucune culture',
-                        style: TextStyle(
-                            fontSize: 18, color: Colors.grey[700])),
-                  ],
+        data: (allList) {
+          final list = _statusFilter == null
+              ? allList
+              : allList.where((c) => c.status == _statusFilter).toList();
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(cropsListProvider),
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                    child: _statusChips(allList),
+                  ),
                 ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: list.length,
-                itemBuilder: (ctx, i) => _CropCard(crop: list[i]),
-              ),
+                if (list.isEmpty)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.grass, size: 80, color: Colors.grey[400]),
+                          const SizedBox(height: 12),
+                          Text('Aucune culture',
+                              style: TextStyle(
+                                  fontSize: 18, color: Colors.grey[700])),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (ctx, i) => _CropCard(crop: list[i]),
+                        childCount: list.length,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/cultures/crop/new'),
@@ -209,6 +247,30 @@ class _CropsTab extends ConsumerWidget {
         label: const Text('Culture'),
         backgroundColor: AppColors.green,
       ),
+    );
+  }
+
+  Widget _statusChips(List<Crop> all) {
+    final counts = <String?, int>{
+      null: all.length,
+      CropStatus.growing: all.where((c) => c.status == CropStatus.growing).length,
+      CropStatus.harvested: all.where((c) => c.status == CropStatus.harvested).length,
+      CropStatus.lost: all.where((c) => c.status == CropStatus.lost).length,
+    };
+    return Wrap(
+      spacing: 6,
+      children: [
+        ChoiceChip(
+          label: Text('Tout (${counts[null]})'),
+          selected: _statusFilter == null,
+          onSelected: (_) => setState(() => _statusFilter = null),
+        ),
+        ...CropStatus.all.map((s) => ChoiceChip(
+              label: Text('${CropStatus.emoji(s)} ${CropStatus.labelFr(s)} (${counts[s] ?? 0})'),
+              selected: _statusFilter == s,
+              onSelected: (_) => setState(() => _statusFilter = s),
+            )),
+      ],
     );
   }
 }
@@ -219,15 +281,40 @@ class _CropCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusColor = crop.status == CropStatus.growing
+        ? AppColors.green
+        : crop.status == CropStatus.lost
+            ? AppColors.red
+            : Colors.grey[600]!;
     return Card(
       child: ListTile(
         leading: Text(crop.iconEmoji, style: const TextStyle(fontSize: 32)),
-        title:
-            Text(crop.nameFr, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(crop.isYearRound
-            ? 'Toute l\'année · ${crop.nameAr}'
-            : 'Saison: ${_seasonRange(crop.seasonMonths)} · ${crop.nameAr}',
-            overflow: TextOverflow.ellipsis, maxLines: 2),
+        title: Row(children: [
+          Expanded(
+            child: Text(crop.nameFr,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '${CropStatus.emoji(crop.status)} ${CropStatus.labelFr(crop.status)}',
+              style: TextStyle(
+                  fontSize: 11,
+                  color: statusColor,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ]),
+        subtitle: Text(
+            crop.isYearRound
+                ? 'Toute l\'année · ${crop.nameAr}'
+                : 'Saison: ${_seasonRange(crop.seasonMonths)} · ${crop.nameAr}',
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2),
         onTap: () => context.push('/cultures/crop/${crop.id}'),
       ),
     );
@@ -236,18 +323,8 @@ class _CropCard extends StatelessWidget {
   String _seasonRange(List<int> months) {
     if (months.isEmpty) return '12 mois';
     const names = [
-      'Jan',
-      'Fév',
-      'Mar',
-      'Avr',
-      'Mai',
-      'Juin',
-      'Juil',
-      'Août',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Déc'
+      'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
+      'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'
     ];
     return months.map((m) => names[m - 1]).join(', ');
   }

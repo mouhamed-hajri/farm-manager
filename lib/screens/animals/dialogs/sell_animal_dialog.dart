@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/animal.dart';
 import '../../../providers/core_providers.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/date_field.dart';
 
 class SellAnimalDialog extends ConsumerStatefulWidget {
   const SellAnimalDialog({super.key, required this.animal});
@@ -37,7 +38,7 @@ class _SellAnimalDialogState extends ConsumerState<SellAnimalDialog> {
     try {
       await ref.read(saleRepositoryProvider).sellAnimal(
             animal: widget.animal,
-            salePrice: double.parse(_priceController.text),
+            salePrice: double.parse(_priceController.text.replaceAll(',', '.')),
             saleDate: _date.toIso8601String().substring(0, 10),
             buyerName: _buyerNameController.text.trim().isEmpty
                 ? null
@@ -62,15 +63,6 @@ class _SellAnimalDialogState extends ConsumerState<SellAnimalDialog> {
     }
   }
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-    );
-    if (d != null) setState(() => _date = d);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,19 +83,22 @@ class _SellAnimalDialogState extends ConsumerState<SellAnimalDialog> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Requis';
-                  final n = double.tryParse(v);
-                  if (n == null || n < 0) return 'Prix invalide';
+                  final n = double.tryParse(v.replaceAll(',', '.'));
+                  if (n == null || n <= 0) return 'Prix invalide';
                   return null;
                 },
               ),
               const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Date de vente'),
-                subtitle: Text(_date.toIso8601String().substring(0, 10)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: _pickDate,
+              DateField(
+                label: 'Date de vente',
+                initialDate: _date,
+                lastDate: DateTime.now(),
+                required: true,
+                onChanged: (d) {
+                  if (d != null) setState(() => _date = d);
+                },
               ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _buyerNameController,
                 decoration: const InputDecoration(

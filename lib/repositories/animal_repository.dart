@@ -8,6 +8,7 @@ import '../models/history_entry.dart';
 import '../models/sale.dart';
 import '../services/farm_id_service.dart';
 import '../services/firebase_service.dart';
+import '../utils/history_labels.dart';
 import 'expense_repository.dart';
 import 'history_repository.dart';
 import 'reproduction_event_repository.dart';
@@ -44,6 +45,9 @@ class AnimalRepository {
     final row = await _db.getAnimalById(id);
     return row?.toModel();
   }
+
+  Stream<Animal?> watchById(String id) =>
+      _db.watchAnimalById(id).map((row) => row?.toModel());
 
   /// Adds a new animal. Generates a farm_id atomically using the given prefix.
   /// Sets financeOwnerId/financeMode based on gender and motherId.
@@ -104,9 +108,10 @@ class AnimalRepository {
         final history = HistoryEntry(
           id: _uuid.v4(),
           userId: toSave.userId,
-          actionType: 'animal_added',
-          title: 'Animal ajouté : ${toSave.farmId}',
-          description: '${toSave.displayName} acheté à ${toSave.purchasePrice} TND',
+          actionType: HistoryAction.animalAdded,
+          title: HistoryLabels.animalAddedTitle(toSave.farmId),
+          description: HistoryLabels.animalAddedDescPurchased(
+              toSave.displayName, toSave.purchasePrice!),
           relatedType: 'animal',
           relatedId: toSave.id,
           date: toSave.purchaseDate ?? now.substring(0, 10),
@@ -118,9 +123,9 @@ class AnimalRepository {
         final history = HistoryEntry(
           id: _uuid.v4(),
           userId: toSave.userId,
-          actionType: 'animal_added',
-          title: 'Animal ajouté : ${toSave.farmId}',
-          description: toSave.displayName,
+          actionType: HistoryAction.animalAdded,
+          title: HistoryLabels.animalAddedTitle(toSave.farmId),
+          description: HistoryLabels.animalAddedDesc(toSave.displayName),
           relatedType: 'animal',
           relatedId: toSave.id,
           date: now.substring(0, 10),
@@ -225,9 +230,9 @@ class AnimalRepository {
     final history = HistoryEntry(
       id: _uuid.v4(),
       userId: animal.userId,
-      actionType: 'animal_died',
-      title: 'Animal décédé : ${animal.farmId}',
-      description: deathCause ?? '',
+      actionType: HistoryAction.animalDied,
+      title: HistoryLabels.animalDiedTitle(animal.farmId),
+      description: HistoryLabels.animalDiedDesc(deathCause),
       relatedType: 'animal',
       relatedId: animal.id,
       date: deathDate,

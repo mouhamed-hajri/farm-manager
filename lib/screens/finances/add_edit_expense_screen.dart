@@ -9,6 +9,7 @@ import '../../providers/crop_provider.dart';
 import '../../providers/field_provider.dart';
 import '../../providers/species_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/date_field.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditExpenseScreen extends ConsumerStatefulWidget {
@@ -75,16 +76,6 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
     });
   }
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-    );
-    if (d != null) setState(() => _date = d);
-  }
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final user = ref.read(currentUserProvider);
@@ -100,7 +91,7 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
             linkedSpeciesId: _scope == ExpenseScope.animal ? _linkedSpeciesId : null,
             linkedCropId: _linkedCropId,
             linkedFieldId: _linkedFieldId,
-            amount: double.parse(_amountController.text),
+            amount: double.parse(_amountController.text.replaceAll(',', '.')),
             category: _category,
             date: _date.toIso8601String().substring(0, 10),
             description: _descController.text.trim().isEmpty
@@ -171,18 +162,20 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Requis';
-                final n = double.tryParse(v);
-                if (n == null || n < 0) return 'Montant invalide';
+                final n = double.tryParse(v.replaceAll(',', '.'));
+                if (n == null || n <= 0) return 'Montant invalide';
                 return null;
               },
             ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date'),
-              subtitle: Text(_date.toIso8601String().substring(0, 10)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: _pickDate,
+            DateField(
+              label: 'Date',
+              initialDate: _date,
+              lastDate: DateTime.now(),
+              required: true,
+              onChanged: (d) {
+                if (d != null) setState(() => _date = d);
+              },
             ),
             const SizedBox(height: 12),
             TextFormField(

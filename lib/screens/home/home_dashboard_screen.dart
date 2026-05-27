@@ -319,8 +319,36 @@ class HomeTab extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text('Activités récentes',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.history, color: AppColors.blue),
+              title: const Text('Historique',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text(
+                  'Animaux nés, vendus, décédés · Recherche par année'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/history'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Activités récentes',
+                  style:
+                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              TextButton.icon(
+                onPressed: () => context.push('/history'),
+                icon: const Icon(Icons.history, size: 16),
+                label: const Text('Voir tout'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.blue,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           historyAsync.when(
             data: (list) => list.isEmpty

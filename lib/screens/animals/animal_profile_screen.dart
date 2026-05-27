@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -544,6 +545,7 @@ class _FemaleFinanceToggle extends ConsumerWidget {
     );
     if (amount != null && context.mounted) {
       await ref.read(animalRepositoryProvider).makeIndependent(animal, amount);
+      _invalidateLedgers(ref);
     }
   }
 
@@ -566,6 +568,14 @@ class _FemaleFinanceToggle extends ConsumerWidget {
     );
     if (ok == true && context.mounted) {
       await ref.read(animalRepositoryProvider).makeCountedUnderMother(animal);
+      _invalidateLedgers(ref);
+    }
+  }
+
+  void _invalidateLedgers(WidgetRef ref) {
+    ref.invalidate(animalLedgerProvider(animal.id));
+    if (animal.motherId != null) {
+      ref.invalidate(animalLedgerProvider(animal.motherId!));
     }
   }
 }
@@ -723,6 +733,7 @@ class _MaleBreederToggle extends ConsumerWidget {
       await ref
           .read(animalRepositoryProvider)
           .designateAsBreeder(animal, amount);
+      _invalidateLedgers(ref);
     }
   }
 
@@ -747,6 +758,14 @@ class _MaleBreederToggle extends ConsumerWidget {
       await ref
           .read(animalRepositoryProvider)
           .removeBreederStatus(animal);
+      _invalidateLedgers(ref);
+    }
+  }
+
+  void _invalidateLedgers(WidgetRef ref) {
+    ref.invalidate(animalLedgerProvider(animal.id));
+    if (animal.motherId != null) {
+      ref.invalidate(animalLedgerProvider(animal.motherId!));
     }
   }
 }
@@ -1151,7 +1170,11 @@ class _BirthGroupCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sorted = [...events]
-      ..sort((a, b) => a.eventDate.compareTo(b.eventDate));
+      ..sort((a, b) {
+        final d = a.eventDate.compareTo(b.eventDate);
+        if (d != 0) return d;
+        return a.createdAt.compareTo(b.createdAt);
+      });
 
     // Build mating attempts in order, pairing each mating with its outcome.
     final attempts = <_MatingAttempt>[];
@@ -1219,9 +1242,59 @@ class _BirthGroupCard extends ConsumerWidget {
               children: [
                 Icon(headerIcon, color: headerColor, size: 18),
                 const SizedBox(width: 6),
-                Text(headerLabel,
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, color: headerColor)),
+                Expanded(
+                  child: Text(headerLabel,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, color: headerColor)),
+                ),
+                PopupMenuButton<String>(
+                  iconSize: 18,
+                  padding: EdgeInsets.zero,
+                  onSelected: (v) async {
+                    if (v != 'delete') return;
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Supprimer ce cycle ?'),
+                        content: const Text(
+                          'Tous les événements de ce cycle seront supprimés définitivement.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Annuler'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white),
+                            child: const Text('Supprimer'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    final repo = ref.read(reproductionEventRepositoryProvider);
+                    for (final e in events) {
+                      await repo.delete(e.id);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline,
+                              color: Colors.red, size: 16),
+                          SizedBox(width: 8),
+                          Text('Supprimer ce cycle',
+                              style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1493,7 +1566,15 @@ class _PhotoHeader extends StatelessWidget {
     final image = hasLocal
         ? Image.file(File(animal.photoLocalPath!), fit: BoxFit.cover)
         : hasCloud
-            ? Image.network(animal.photoCloudUrl!, fit: BoxFit.cover)
+            ? CachedNetworkImage(
+                imageUrl: animal.photoCloudUrl!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                placeholder: (_, __) =>
+                    const Center(child: CircularProgressIndicator()),
+                errorWidget: (_, __, ___) => const Center(
+                    child: Icon(Icons.broken_image, size: 48, color: Colors.grey)),
+              )
             : null;
 
     return Container(

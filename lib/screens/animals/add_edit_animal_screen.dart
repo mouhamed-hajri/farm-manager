@@ -6,6 +6,7 @@ import '../../models/weight_measurement.dart';
 import '../../providers/core_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/date_field.dart';
 import '../../widgets/photo_picker_widget.dart';
 
 class AddEditAnimalScreen extends ConsumerStatefulWidget {
@@ -160,19 +161,6 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
     _birthWeightController.dispose();
     super.dispose();
   }
-
-  Future<void> _pickDate(DateTime? current, void Function(DateTime) onPicked) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) onPicked(picked);
-  }
-
-  String _formatDate(DateTime? d) =>
-      d == null ? 'Choisir' : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -378,13 +366,11 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
               onChanged: (v) => setState(() => _healthStatus = v ?? HealthStatus.healthy),
             ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date de naissance'),
-              subtitle: Text(_formatDate(_birthDate)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () =>
-                  _pickDate(_birthDate, (d) => setState(() => _birthDate = d)),
+            DateField(
+              label: 'Date de naissance',
+              initialDate: _birthDate,
+              lastDate: DateTime.now(),
+              onChanged: (d) => setState(() => _birthDate = d),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -403,13 +389,11 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
               },
             ),
             const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Date d\'achat'),
-              subtitle: Text(_formatDate(_purchaseDate)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () => _pickDate(
-                  _purchaseDate, (d) => setState(() => _purchaseDate = d)),
+            DateField(
+              label: 'Date d\'achat',
+              initialDate: _purchaseDate,
+              lastDate: DateTime.now(),
+              onChanged: (d) => setState(() => _purchaseDate = d),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -485,6 +469,13 @@ class _AddEditAnimalScreenState extends ConsumerState<AddEditAnimalScreen> {
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return null;
+                  final n = double.tryParse(v.replaceAll(',', '.'));
+                  if (n == null) return 'Nombre invalide';
+                  if (n <= 0) return 'Doit être supérieur à 0';
+                  return null;
+                },
               ),
             ],
             if (widget.birthEventId != null && _existing == null) ...[

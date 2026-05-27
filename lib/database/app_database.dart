@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:sqlite3/common.dart';
 import '../models/animal.dart';
 import '../models/breed.dart';
 import '../models/expense.dart';
@@ -7,6 +8,8 @@ import '../models/history_entry.dart';
 import '../models/species.dart';
 import '../models/field.dart';
 import '../models/crop.dart';
+import '../models/crop_activity.dart';
+import '../models/harvest.dart';
 import '../models/sale.dart';
 import '../models/reproduction_event.dart';
 import '../models/health_event.dart';
@@ -21,6 +24,8 @@ import 'tables/species_table.dart';
 import 'tables/farm_id_counters_table.dart';
 import 'tables/fields_table.dart';
 import 'tables/crops_table.dart';
+import 'tables/crop_activities_table.dart';
+import 'tables/harvests_table.dart';
 import 'tables/sales_table.dart';
 import 'tables/reproduction_events_table.dart';
 import 'tables/health_events_table.dart';
@@ -39,6 +44,8 @@ part 'app_database.g.dart';
   FarmIdCountersTable,
   FieldsTable,
   CropsTable,
+  CropActivitiesTable,
+  HarvestsTable,
   SalesTable,
   ReproductionEventsTable,
   HealthEventsTable,
@@ -50,11 +57,41 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 10;
+
+  Future<void> _createIndices() async {
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_animals_user ON animals(user_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_animals_species ON animals(user_id, species_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_animals_finance_owner ON animals(finance_owner_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(user_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_expenses_linked_animal ON expenses(linked_animal_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_history_user_date ON history(user_id, date)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_sales_user ON sales(user_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_weight_animal ON weight_measurements(animal_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_health_animal ON health_events(animal_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_repro_animal ON reproduction_events(animal_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_crop_activities_crop ON crop_activities(crop_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_harvests_crop ON harvests(crop_id)');
+  }
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
+        onCreate: (m) async {
+          await m.createAll();
+          await _createIndices();
+        },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             for (final table in allTables) {
@@ -94,11 +131,49 @@ class AppDatabase extends _$AppDatabase {
           if (from < 7) {
             await m.addColumn(animalsTable, animalsTable.isBreeder);
           }
+          if (from < 8) {
+            // Fix residue from the v3 migration bug: female offspring with a
+            // mother were incorrectly assigned 'independent_female_center'.
+            // Only reset females that have no user-set valuation (which would
+            // indicate the user intentionally made them independent later).
+            await customStatement('''
+              UPDATE animals SET
+                finance_mode   = 'counted_under_mother',
+                finance_owner_id = mother_id
+              WHERE gender = 'female'
+                AND mother_id IS NOT NULL
+                AND finance_mode = 'independent_female_center'
+                AND (valuation_amount IS NULL OR valuation_amount = 0)
+            ''');
+          }
+          if (from < 9) {
+            await _createIndices();
+          }
+          if (from < 10) {
+            await m.addColumn(cropsTable, cropsTable.status);
+            await m.createTable(cropActivitiesTable);
+            await m.createTable(harvestsTable);
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_crop_activities_crop ON crop_activities(crop_id)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_harvests_crop ON harvests(crop_id)');
+          }
         },
       );
 
   static QueryExecutor _openConnection() {
-    return driftDatabase(name: 'farm_manager_db');
+    return driftDatabase(
+      name: 'farm_manager_db',
+      native: const DriftNativeOptions(
+        setup: _setupDatabase,
+      ),
+    );
+  }
+
+  static void _setupDatabase(CommonDatabase db) {
+    db.execute('PRAGMA journal_mode=WAL');
+    db.execute('PRAGMA busy_timeout=5000');
+    db.execute('PRAGMA synchronous=NORMAL');
   }
 
   // ─── Species ───────────────────────────────────────────────────────────────
@@ -254,6 +329,9 @@ class AppDatabase extends _$AppDatabase {
   Future<AnimalsTableData?> getAnimalById(String id) =>
       (select(animalsTable)..where((t) => t.id.equals(id))).getSingleOrNull();
 
+  Stream<AnimalsTableData?> watchAnimalById(String id) =>
+      (select(animalsTable)..where((t) => t.id.equals(id))).watchSingleOrNull();
+
   Future<int> insertAnimal(AnimalsTableCompanion entry) =>
       into(animalsTable).insert(entry);
 
@@ -383,6 +461,76 @@ class AppDatabase extends _$AppDatabase {
   Future<void> markCropSynced(String id) async {
     await (update(cropsTable)..where((t) => t.id.equals(id))).write(
       const CropsTableCompanion(syncStatus: Value('synced')),
+    );
+  }
+
+  // ─── Crop Activities ──────────────────────────────────────────────────────
+
+  Stream<List<CropActivitiesTableData>> watchActivitiesForCrop(
+          String userId, String cropId) =>
+      (select(cropActivitiesTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.cropId.equals(cropId))
+            ..orderBy([(t) => OrderingTerm.desc(t.date)]))
+          .watch();
+
+  Future<List<CropActivitiesTableData>> getAllCropActivities(String userId) =>
+      (select(cropActivitiesTable)..where((t) => t.userId.equals(userId)))
+          .get();
+
+  Future<int> insertCropActivity(CropActivitiesTableCompanion entry) =>
+      into(cropActivitiesTable).insertOnConflictUpdate(entry);
+
+  Future<int> deleteCropActivity(String id) =>
+      (delete(cropActivitiesTable)..where((t) => t.id.equals(id))).go();
+
+  Future<int> deleteCropActivitiesForCrop(String cropId) =>
+      (delete(cropActivitiesTable)..where((t) => t.cropId.equals(cropId))).go();
+
+  Future<List<CropActivitiesTableData>> getPendingCropActivities(
+          String userId) =>
+      (select(cropActivitiesTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.syncStatus.equals('pending')))
+          .get();
+
+  Future<void> markCropActivitySynced(String id) async {
+    await (update(cropActivitiesTable)..where((t) => t.id.equals(id))).write(
+      const CropActivitiesTableCompanion(syncStatus: Value('synced')),
+    );
+  }
+
+  // ─── Harvests ─────────────────────────────────────────────────────────────
+
+  Stream<List<HarvestsTableData>> watchHarvestsForCrop(
+          String userId, String cropId) =>
+      (select(harvestsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.cropId.equals(cropId))
+            ..orderBy([(t) => OrderingTerm.desc(t.harvestDate)]))
+          .watch();
+
+  Future<List<HarvestsTableData>> getAllHarvests(String userId) =>
+      (select(harvestsTable)..where((t) => t.userId.equals(userId))).get();
+
+  Future<int> insertHarvest(HarvestsTableCompanion entry) =>
+      into(harvestsTable).insertOnConflictUpdate(entry);
+
+  Future<int> deleteHarvest(String id) =>
+      (delete(harvestsTable)..where((t) => t.id.equals(id))).go();
+
+  Future<int> deleteHarvestsForCrop(String cropId) =>
+      (delete(harvestsTable)..where((t) => t.cropId.equals(cropId))).go();
+
+  Future<List<HarvestsTableData>> getPendingHarvests(String userId) =>
+      (select(harvestsTable)
+            ..where((t) =>
+                t.userId.equals(userId) & t.syncStatus.equals('pending')))
+          .get();
+
+  Future<void> markHarvestSynced(String id) async {
+    await (update(harvestsTable)..where((t) => t.id.equals(id))).write(
+      const HarvestsTableCompanion(syncStatus: Value('synced')),
     );
   }
 
@@ -741,6 +889,12 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<int> deleteHistory(String id) =>
+      (delete(historyTable)..where((t) => t.id.equals(id))).go();
+
+  Future<int> deleteAllHistoryForUser(String userId) =>
+      (delete(historyTable)..where((t) => t.userId.equals(userId))).go();
+
   // ─── Bulk restore ──────────────────────────────────────────────────────────
 
   Future<void> restoreFromCloud({
@@ -756,6 +910,8 @@ class AppDatabase extends _$AppDatabase {
     required List<Reminder> reminders,
     required List<HistoryEntry> history,
     required List<WeightMeasurement> weightMeasurements,
+    List<CropActivity> cropActivities = const [],
+    List<Harvest> harvests = const [],
     required Map<String, dynamic>? counterByPrefixYear, // map "PREFIX-YEAR" -> int
     required UserSettings? settings,
   }) async {
@@ -802,6 +958,43 @@ class AppDatabase extends _$AppDatabase {
             notes: Value(m.notes),
             createdAt: Value(m.createdAt),
             updatedAt: Value(m.updatedAt),
+            syncStatus: const Value('synced'),
+          ),
+        );
+      }
+      for (final a in cropActivities) {
+        await into(cropActivitiesTable).insertOnConflictUpdate(
+          CropActivitiesTableCompanion(
+            id: Value(a.id),
+            userId: Value(a.userId),
+            cropId: Value(a.cropId),
+            activityType: Value(a.activityType),
+            date: Value(a.date),
+            description: Value(a.description),
+            cost: Value(a.cost),
+            linkedExpenseId: Value(a.linkedExpenseId),
+            notes: Value(a.notes),
+            createdAt: Value(a.createdAt),
+            updatedAt: Value(a.updatedAt),
+            syncStatus: const Value('synced'),
+          ),
+        );
+      }
+      for (final h in harvests) {
+        await into(harvestsTable).insertOnConflictUpdate(
+          HarvestsTableCompanion(
+            id: Value(h.id),
+            userId: Value(h.userId),
+            cropId: Value(h.cropId),
+            harvestDate: Value(h.harvestDate),
+            quantity: Value(h.quantity),
+            unit: Value(h.unit),
+            pricePerUnit: Value(h.pricePerUnit),
+            totalPrice: Value(h.totalPrice),
+            notes: Value(h.notes),
+            linkedSaleId: Value(h.linkedSaleId),
+            createdAt: Value(h.createdAt),
+            updatedAt: Value(h.updatedAt),
             syncStatus: const Value('synced'),
           ),
         );
@@ -1025,6 +1218,7 @@ class AppDatabase extends _$AppDatabase {
         photoCloudUrl: Value(c.photoCloudUrl),
         notes: Value(c.notes),
         isDefault: Value(c.isDefault),
+        status: Value(c.status),
         createdAt: Value(c.createdAt),
         updatedAt: Value(c.updatedAt),
         syncStatus: const Value('synced'),
@@ -1243,6 +1437,42 @@ extension CropDataExt on CropsTableData {
         photoCloudUrl: photoCloudUrl,
         notes: notes,
         isDefault: isDefault,
+        status: status,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        syncStatus: syncStatus,
+      );
+}
+
+extension CropActivityDataExt on CropActivitiesTableData {
+  CropActivity toModel() => CropActivity(
+        id: id,
+        userId: userId,
+        cropId: cropId,
+        activityType: activityType,
+        date: date,
+        description: description,
+        cost: cost,
+        linkedExpenseId: linkedExpenseId,
+        notes: notes,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        syncStatus: syncStatus,
+      );
+}
+
+extension HarvestDataExt on HarvestsTableData {
+  Harvest toModel() => Harvest(
+        id: id,
+        userId: userId,
+        cropId: cropId,
+        harvestDate: harvestDate,
+        quantity: quantity,
+        unit: unit,
+        pricePerUnit: pricePerUnit,
+        totalPrice: totalPrice,
+        notes: notes,
+        linkedSaleId: linkedSaleId,
         createdAt: createdAt,
         updatedAt: updatedAt,
         syncStatus: syncStatus,

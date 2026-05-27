@@ -7,6 +7,7 @@ import '../../../providers/animal_provider.dart';
 import '../../../providers/core_providers.dart';
 import '../../../services/consanguinity_service.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/date_field.dart';
 import '../father_selection_screen.dart';
 
 class AddReproductionEventDialog extends ConsumerStatefulWidget {
@@ -33,6 +34,7 @@ class _AddReproductionEventDialogState
   DateTime? _dueDate;
   String? _partnerId;
   String? _partnerFarmId;
+  int? _consanguinityDistance; // non-null → show inline warning
   final _offspringCountController = TextEditingController(text: '1');
   final _notesController = TextEditingController();
   bool _loading = false;
@@ -50,19 +52,6 @@ class _AddReproductionEventDialogState
     super.dispose();
   }
 
-  Future<void> _pickDate(DateTime? cur, void Function(DateTime) on,
-      {bool allowFuture = false}) async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: cur ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: allowFuture
-          ? DateTime.now().add(const Duration(days: 365 * 2))
-          : DateTime.now(),
-    );
-    if (d != null) on(d);
-  }
-
   Future<void> _pickFather() async {
     final selected = await Navigator.of(context).push<Animal?>(
       MaterialPageRoute(
@@ -70,15 +59,27 @@ class _AddReproductionEventDialogState
           userId: widget.mother.userId,
           speciesId: widget.mother.speciesId,
           eventDate: _eventDate,
+          motherFatherId: widget.mother.fatherId,
+          motherMotherId: widget.mother.motherId,
+          motherBirthEventId: widget.mother.birthEventId,
         ),
       ),
     );
-    // `selected` is null when user picks "Père inconnu"
-    // Navigator.pop with null vs. not popping are differentiated by
-    // checking whether the route was actually popped.
+    int? distance;
+    if (selected != null) {
+      final allAnimals =
+          ref.read(allAnimalsProvider).asData?.value ?? const [];
+      final animalsById = {for (final a in allAnimals) a.id: a};
+      distance = ConsanguinityService.findRelationshipDistance(
+        animalsById: animalsById,
+        animalAId: widget.mother.id,
+        animalBId: selected.id,
+      );
+    }
     setState(() {
       _partnerId = selected?.id;
       _partnerFarmId = selected?.farmId;
+      _consanguinityDistance = distance;
     });
   }
 
@@ -187,6 +188,14 @@ class _AddReproductionEventDialogState
       }
       if (!mounted) return;
       Navigator.pop(context, groupId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur : $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -206,7 +215,7 @@ class _AddReproductionEventDialogState
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              initialValue: _type,
+              value: _type,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Type',
@@ -232,44 +241,14 @@ class _AddReproductionEventDialogState
               onChanged: (v) => setState(() => _type = v ?? _type),
             ),
             const SizedBox(height: 12),
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => _pickDate(
-                  _eventDate, (d) => setState(() => _eventDate = d)),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.green, width: 1.5),
-                  borderRadius: BorderRadius.circular(8),
-                  color: AppColors.green.withValues(alpha: 0.05),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today,
-                        color: AppColors.green, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Date de l\'événement',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.green,
-                                  fontWeight: FontWeight.w600)),
-                          Text(
-                            _eventDate.toIso8601String().substring(0, 10),
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.edit, size: 16, color: Colors.grey),
-                  ],
-                ),
-              ),
+            DateField(
+              label: 'Date de l\'événement',
+              initialDate: _eventDate,
+              lastDate: DateTime.now(),
+              required: true,
+              onChanged: (d) {
+                if (d != null) setState(() => _eventDate = d);
+              },
             ),
             if (showFather && !showNoExtraFields) ...[
               const SizedBox(height: 10),
@@ -294,19 +273,18 @@ class _AddReproductionEventDialogState
                 'Mâles disponibles au ${_eventDate.toIso8601String().substring(0, 10)}',
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
+              if (_consanguinityDistance != null) ...[
+                const SizedBox(height: 8),
+                _ConsanguinityBanner(distance: _consanguinityDistance!),
+              ],
             ],
             if (_type == ReproductionEventType.pregnancyConfirmed) ...[
-              const SizedBox(height: 8),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Date de mise bas prévue'),
-                subtitle: Text(_dueDate == null
-                    ? 'Choisir'
-                    : _dueDate!.toIso8601String().substring(0, 10)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () => _pickDate(
-                    _dueDate, (d) => setState(() => _dueDate = d),
-                    allowFuture: true),
+              const SizedBox(height: 12),
+              DateField(
+                label: 'Date de mise bas prévue',
+                initialDate: _dueDate,
+                lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                onChanged: (d) => setState(() => _dueDate = d),
               ),
             ],
             if (_type == ReproductionEventType.birth) ...[
@@ -349,6 +327,35 @@ class _AddReproductionEventDialogState
               : const Text('Enregistrer'),
         ),
       ],
+    );
+  }
+}
+
+class _ConsanguinityBanner extends StatelessWidget {
+  const _ConsanguinityBanner({required this.distance});
+  final int distance;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (distance) {
+      <= 1 => ('⚠️ Relation directe — père / enfant', Colors.red),
+      2 => ('⚠️ Frères / sœurs ou grands-parents', Colors.red),
+      3 => ('⚠️ Apparentés (3 générations)', Colors.orange),
+      _ => ('⚠️ Apparentés ($distance générations)', Colors.amber),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            color: color, fontWeight: FontWeight.w600, fontSize: 12),
+      ),
     );
   }
 }

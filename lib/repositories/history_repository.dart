@@ -1,11 +1,13 @@
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../models/history_entry.dart';
+import '../services/firebase_service.dart';
 
 class HistoryRepository {
-  HistoryRepository(this._db);
+  HistoryRepository(this._db, this._firebase);
 
   final AppDatabase _db;
+  final FirebaseService _firebase;
 
   Stream<List<HistoryEntry>> watchHistory(String userId) =>
       _db.watchHistory(userId).map(
@@ -22,6 +24,20 @@ class HistoryRepository {
   }
 
   Future<void> markSynced(String id) => _db.markHistorySynced(id);
+
+  /// Deletes a single history entry locally + on Firestore.
+  /// Firestore failure is swallowed (offline-first); the local row is gone
+  /// either way so the user gets immediate feedback.
+  Future<void> deleteEntry(HistoryEntry entry) async {
+    await _db.deleteHistory(entry.id);
+    try {
+      await _firebase.deleteHistory(entry.userId, entry.id);
+    } catch (_) {/* offline-tolerant */}
+  }
+
+  Future<void> deleteAllForUser(String userId) async {
+    await _db.deleteAllHistoryForUser(userId);
+  }
 
   HistoryTableCompanion _toCompanion(HistoryEntry h) => HistoryTableCompanion(
         id: Value(h.id),
