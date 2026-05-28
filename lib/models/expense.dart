@@ -162,11 +162,121 @@ abstract class CropExpenseCategory {
 }
 
 abstract class FieldExpenseCategory {
-  static const rentPayment = 'rent_payment';
-  static const maintenance = 'maintenance';
-  static const other = 'other';
+  // ─── Categories shown in the picker ──────────────────────────────────────
+  static const workforce = 'workforce';        // 👷 Main d'œuvre
+  static const treatment = 'treatment';        // 🧪 Traitement (with description + photo)
+  static const pruning = 'pruning';            // ✂️ Taille
+  static const electricity = 'electricity';    // 💡 Électricité
+  static const supplies = 'supplies';          // 🛒 Achats (description + photo, required)
+  static const other = 'other';                // 📝 Autre (must specify)
 
-  static const all = [rentPayment, maintenance, other];
+  // ─── Legacy categories ────────────────────────────────────────────────────
+  // Not selectable in the picker, but kept so existing rows still display
+  // with the right emoji + label.
+  static const chemicals = 'chemicals';        // old name for treatment
+  static const plowing = 'plowing';
+  static const irrigation = 'irrigation';
+  static const fertilizer = 'fertilizer';
+  static const fencing = 'fencing';
+  static const maintenance = 'maintenance';
+  static const rentPayment = 'rent_payment';
+
+  /// Order matters — controls how the picker chips appear.
+  static const all = [
+    workforce,
+    treatment,
+    pruning,
+    electricity,
+    supplies,
+    other,
+  ];
+
+  static String emoji(String c) {
+    switch (c) {
+      case workforce:
+        return '👷';
+      case treatment:
+      case chemicals:
+        return '🧪';
+      case pruning:
+        return '✂️';
+      case electricity:
+        return '💡';
+      case supplies:
+        return '🛒';
+      // legacy
+      case plowing:
+        return '🚜';
+      case irrigation:
+        return '💧';
+      case fertilizer:
+        return '🌿';
+      case fencing:
+        return '🚧';
+      case maintenance:
+        return '🔧';
+      case rentPayment:
+        return '💰';
+      default:
+        return '📝';
+    }
+  }
+
+  static String labelFr(String c) {
+    switch (c) {
+      case workforce:
+        return 'Main d\'œuvre';
+      case treatment:
+      case chemicals:
+        return 'Traitement';
+      case pruning:
+        return 'Taille';
+      case electricity:
+        return 'Électricité';
+      case supplies:
+        return 'Achats';
+      // legacy
+      case plowing:
+        return 'Labour';
+      case irrigation:
+        return 'Irrigation';
+      case fertilizer:
+        return 'Engrais';
+      case fencing:
+        return 'Clôture';
+      case maintenance:
+        return 'Entretien';
+      case rentPayment:
+        return 'Loyer';
+      default:
+        return 'Autre';
+    }
+  }
+
+  /// Whether the dialog should show the description text field for [c].
+  static bool showDescription(String c) =>
+      c == supplies || c == treatment || c == other;
+
+  /// Whether the description is mandatory (blocks save when empty).
+  static bool descriptionRequired(String c) =>
+      c == supplies || c == other;
+
+  /// Label shown above the description field — varies by category.
+  static String descriptionLabel(String c) {
+    switch (c) {
+      case supplies:
+        return 'Qu\'avez-vous acheté ? *';
+      case treatment:
+        return 'Description (produit, cible, dosage…)';
+      case other:
+        return 'Précisez *';
+      default:
+        return 'Description';
+    }
+  }
+
+  /// Whether the photo picker should appear at the bottom of the dialog.
+  static bool showPhoto(String c) => c == supplies || c == treatment;
 }
 
 abstract class GeneralExpenseCategory {

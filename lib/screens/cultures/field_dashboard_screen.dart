@@ -12,6 +12,7 @@ import '../../providers/expense_provider.dart';
 import '../../providers/field_provider.dart';
 import '../../providers/sale_provider.dart';
 import '../../theme/app_theme.dart';
+import 'dialogs/add_field_expense_dialog.dart';
 
 class FieldDashboardScreen extends ConsumerStatefulWidget {
   const FieldDashboardScreen({super.key, required this.fieldId});
@@ -69,9 +70,12 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen> {
         .where((e) =>
             e.scope == ExpenseScope.field && e.linkedFieldId == widget.fieldId)
         .toList();
-    final fieldExpenseTotal = fieldExpensesAll
+    final fieldExpensesThisYear = fieldExpensesAll
         .where((e) => _inYear(e.date))
-        .fold<double>(0, (s, e) => s + e.amount);
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final fieldExpenseTotal =
+        fieldExpensesThisYear.fold<double>(0, (s, e) => s + e.amount);
 
     // Years with any data for this field
     final years = <int>{
@@ -181,16 +185,41 @@ class _FieldDashboardScreenState extends ConsumerState<FieldDashboardScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // Field-level expenses: compact row, tappable to add more
-              _FieldExpensesRow(
+              // Field-level expenses: typed list with picker-driven entry
+              _FieldExpensesSection(
+                fieldId: widget.fieldId,
+                expenses: fieldExpensesThisYear,
                 total: fieldExpenseTotal,
-                onAdd: () => context.push(
-                  '/finances/expense/new',
-                  extra: <String, String?>{
-                    'scope': 'field',
-                    'fieldId': widget.fieldId,
-                  },
+                onAdd: () => showDialog(
+                  context: context,
+                  builder: (_) =>
+                      AddFieldExpenseDialog(fieldId: widget.fieldId),
                 ),
+                onDelete: (e) async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Supprimer ce frais ?'),
+                      content: const Text('Cette action est irréversible.'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Annuler')),
+                        ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.red,
+                                foregroundColor: Colors.white),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Supprimer')),
+                      ],
+                    ),
+                  );
+                  if (ok == true) {
+                    await ref
+                        .read(expenseRepositoryProvider)
+                        .deleteExpense(e.id);
+                  }
+                },
               ),
 
               const SizedBox(height: 16),
@@ -515,14 +544,118 @@ class _CropSummaryCard extends StatelessWidget {
   }
 }
 
-class _FieldExpensesRow extends StatelessWidget {
-  const _FieldExpensesRow({required this.total, required this.onAdd});
+/// Typed list of field-level expenses (plowing / irrigation / fencing /
+/// maintenance / …). Mirrors the crop-activity timeline pattern.
+class _FieldExpensesSection extends StatelessWidget {
+  const _FieldExpensesSection({
+    required this.fieldId,
+    required this.expenses,
+    required this.total,
+    required this.onAdd,
+    required this.onDelete,
+  });
+
+  final String fieldId;
+  final List<Expense> expenses;
   final double total;
+  final VoidCallback onAdd;
+  final Future<void> Function(Expense) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Padding(
+          padding: const EdgeInsets.only(left: 4, right: 4, bottom: 6),
+          child: Row(
+            children: [
+              Text('Frais du champ',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700])),
+              const Spacer(),
+              if (total > 0)
+                Text(
+                  '−${total.toStringAsFixed(0)} TND',
+                  style: const TextStyle(
+                      color: AppColors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13),
+                ),
+            ],
+          ),
+        ),
+
+        if (expenses.isEmpty)
+          _EmptyFieldExpenses(onAdd: onAdd)
+        else ...[
+          ...expenses.map((e) => _ExpenseTile(
+                expense: e,
+                onDelete: () => onDelete(e),
+              )),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Ajouter un frais'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.green,
+              side: const BorderSide(color: AppColors.green),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            onPressed: onAdd,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ExpenseTile extends StatelessWidget {
+  const _ExpenseTile({required this.expense, required this.onDelete});
+  final Expense expense;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final emoji = FieldExpenseCategory.emoji(expense.category);
+    final label = FieldExpenseCategory.labelFr(expense.category);
+    final desc = expense.description?.isNotEmpty == true
+        ? expense.description!
+        : label;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      child: ListTile(
+        dense: true,
+        leading: Text(emoji, style: const TextStyle(fontSize: 22)),
+        title: Text(desc,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13)),
+        subtitle: Text(
+          desc == label ? expense.date : '$label  ·  ${expense.date}',
+          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+        ),
+        trailing: Text(
+          '−${expense.amount.toStringAsFixed(0)} TND',
+          style: const TextStyle(
+              color: AppColors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 13),
+        ),
+        onLongPress: onDelete,
+      ),
+    );
+  }
+}
+
+class _EmptyFieldExpenses extends StatelessWidget {
+  const _EmptyFieldExpenses({required this.onAdd});
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
-    final has = total > 0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -530,53 +663,38 @@ class _FieldExpensesRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: has
-                ? AppColors.red.withValues(alpha: 0.06)
-                : Colors.grey.withValues(alpha: 0.06),
+            color: Colors.grey.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-                color: Colors.grey.withValues(alpha: 0.25), width: 0.5),
+                color: Colors.grey.withValues(alpha: 0.25),
+                width: 0.6),
           ),
           child: Row(
             children: [
               Icon(Icons.money_off,
-                  color: has ? AppColors.red : Colors.grey[600], size: 20),
+                  color: Colors.grey[600], size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text('Aucun frais cette période',
+                        style: TextStyle(
+                            color: Colors.grey[800],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
                     Text(
-                      'Frais du champ',
+                      'Labour, irrigation, clôture, entretien…',
                       style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: has ? AppColors.red : Colors.grey[800],
-                          fontSize: 13),
-                    ),
-                    Text(
-                      has
-                          ? 'Plowing, irrigation générale, entretien…'
-                          : 'Aucun frais. Toucher pour ajouter.',
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[600]),
+                          color: Colors.grey[600], fontSize: 11),
                     ),
                   ],
                 ),
               ),
-              if (has) ...[
-                Text(
-                  '−${total.toStringAsFixed(0)} TND',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.red,
-                      fontSize: 15),
-                ),
-                const SizedBox(width: 4),
-              ],
               const Icon(Icons.add_circle_outline,
-                  color: AppColors.green, size: 22),
+                  color: AppColors.green, size: 24),
             ],
           ),
         ),
